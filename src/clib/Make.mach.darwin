@@ -35,10 +35,10 @@ MACH_FILE  = Make.mach.darwin
 # Install paths (local variables)
 #-----------------------------------------------------------------------
 
-LOCAL_PACKAGES       = /usr/local
+LOCAL_PACKAGES       = /opt/homebrew
 
-LOCAL_FC_INSTALL     = /usr/local/Cellar/gcc/10.2.0_4/lib/gcc/10
-LOCAL_HDF5_INSTALL   = /usr/local/Cellar/hdf5/1.12.0_1
+LOCAL_FC_INSTALL     = /opt/homebrew/Cellar/gcc/13.2.0/lib/gcc/13
+LOCAL_HDF5_INSTALL   = /opt/homebrew/Cellar/hdf5/1.14.3
 LOCAL_SZIP_INSTALL   = $(LOCAL_PACKAGES)
 
 #-----------------------------------------------------------------------
@@ -47,11 +47,11 @@ LOCAL_SZIP_INSTALL   = $(LOCAL_PACKAGES)
 
 MACH_CPP       = /usr/bin/cpp
 
-MACH_CC_NOMPI  = gcc-10  # C compiler when not using MPI
-MACH_CXX_NOMPI = g++-10 # C++ compiler when not using MPI
+MACH_CC_NOMPI  = gcc  # C compiler when not using MPI
+MACH_CXX_NOMPI = g++-13 # C++ compiler when not using MPI
 MACH_FC_NOMPI  = gfortran # Fortran 77 compiler when not using MPI
 MACH_F90_NOMPI = gfortran # Fortran 90 compiler when not using MPI
-MACH_LD_NOMPI  = gcc-10 # Linker when not using MPI
+MACH_LD_NOMPI  = gcc # Linker when not using MPI
 
 MACH_LIBTOOL   = glibtool
 

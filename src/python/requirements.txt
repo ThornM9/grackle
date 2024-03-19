@@ -1,0 +1,8 @@
+cython
+flake8
+h5py
+matplotlib
+numpy
+packaging
+pytest
+yt

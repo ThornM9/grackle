@@ -49,3 +49,6 @@ src/python/.cache/*
 src/python/pygrackle.egg-info/*
 src/python/pygrackle/*.c
 doc/build
+
+.vscode
+venv
