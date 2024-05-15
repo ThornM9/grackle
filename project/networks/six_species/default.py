@@ -62,7 +62,7 @@ species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
 
 
 def euler_method_system(equations, initial_conditions, t_span, T, rates):
-    dt = abs(initial_conditions[0] / dHI_dt(rates, *initial_conditions, T)) * 0.001
+    dt = abs(initial_conditions[0] / dHI_dt(rates, *initial_conditions, T)) * 0.0001
     print(f"timestep: {dt * 3.1536e13}s")
 
     # dt = abs(2 / dHI_dt(rates, *initial_conditions, T)) * 0.1

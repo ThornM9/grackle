@@ -18,13 +18,31 @@ from networks.six_species.asymptotic import (
     flux_limited_solver,
     species_names as flfd_species_names,
 )
+from networks.six_species.asymptotic_2 import (
+    odes as asymptotic_odes,
+    asymptotic_methods_solver,
+    species_names as asymptotic_species_names,
+)
+from networks.six_species.qss import (
+    odes as qss_odes,
+    qss_methods_solver,
+    species_names as qss_species_names,
+)
 import similaritymeasures
 from test import test_equilibrium
 
+
+# TODO species names can just be the one variable
 # map a config name to the solver, list of odes and the species names
 solver_configs = {
     "default": (default_euler, default_odes, default_species_names),
     "flfd": (flux_limited_solver, flfd_odes, flfd_species_names),
+    "asymptotic": (
+        asymptotic_methods_solver,
+        asymptotic_odes,
+        asymptotic_species_names,
+    ),
+    "qss": (qss_methods_solver, qss_odes, qss_species_names),
 }
 
 
@@ -155,7 +173,10 @@ def solve_network(
         if i < len(species_names):
             plt.plot(exp_t, exp_y[i], label=f"{species_names[i]} Predicted")
 
-    # plt.plot(t, total, label="total")
+    # total = np.sum(exp_y, 0)
+    # total -= exp_y[5]  # don't include the electron density
+    # plt.plot(exp_t, total, label="total")
+
     plt.xlabel("Time (Myr)")
     plt.ylabel("Density (g/cm^3)")
     plt.legend()
@@ -187,7 +208,7 @@ if __name__ == "__main__":
         (1.0 - 0.76) * density,
         tiny_number * density,
         tiny_number * density,
-        0,
+        tiny_number * density,
     ]
     solve_network(
         rates,
@@ -196,5 +217,5 @@ if __name__ == "__main__":
         T,
         error_threshold,
         check_error=False,
-        network_name="default",
+        network_name="asymptotic",
     )

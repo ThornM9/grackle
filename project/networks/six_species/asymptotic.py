@@ -44,7 +44,7 @@ def de_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
 
 
 def dHeI_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = rates.k4(T) * HeII * e
+    creation = nn(rates.k4(T) * HeII * e)
 
     destruction = nn(rates.k3(T) * e * HeI)
 
@@ -52,7 +52,7 @@ def dHeI_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
 
 
 def dHeII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = rates.k3(T) * HeI * e + rates.k6(T) * HeIII * e
+    creation = nn(rates.k3(T) * HeI * e + rates.k6(T) * HeIII * e)
 
     destruction = nn(rates.k4(T) * e * HeII) + nn(rates.k5(T) * e * HeII)
 
@@ -60,7 +60,7 @@ def dHeII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
 
 
 def dHeIII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = rates.k5(T) * HeII * e
+    creation = nn(rates.k5(T) * HeII * e)
 
     destruction = nn(rates.k6(T) * e * HeIII)
 
