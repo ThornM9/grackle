@@ -1,78 +1,316 @@
 import numpy as np
+import math
+
+USE_FLFD = False
 
 
 def nn(x):
-    return max(x, 0)
+    if USE_FLFD:
+        return max(x, 0)
+    return x
 
 
-def dHI_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = nn(rates.k2(T) * HII * e)
-    destruction = (
-        nn(rates.k1(T) * e * HI)
-        + nn(rates.k57(T) * HI * HI)
-        + nn((rates.k58(T) * HeI / 4) * HI)
-    )
+# equation 12 in the asymptotic paper
+def prediction_1(F_p, k_n, k_n_prev, F_p_prev, y_prev, dt):
 
-    return creation - destruction
+    # if k_n == 0 or k_n_prev == 0 or dt == 0:
+    #     print(k_n, k_n_prev, dt)
+    #     print("FOUND")
 
+    if k_n == 0:
+        k_n = 1e-20
+    if k_n_prev == 0:
+        k_n_prev = 1e-20
+    yn = F_p / k_n - ((1 / (k_n * dt)) * ((F_p / k_n) - (F_p_prev / k_n_prev)))
 
-def dHII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = (
-        nn(rates.k1(T) * HI * e)
-        + nn(rates.k57(T) * HI * HI)
-        + nn(rates.k58(T) * HI * HeI / 4)
-    )
-
-    destruction = nn(rates.k2(T) * e * HII)
-
-    return creation - destruction
+    return yn
+    # return first_term - second_term
 
 
-def de_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = nn(rates.k57(T) * HI * HI) + nn(rates.k58(T) * HI * HeI / 4)
-
-    destruction = -(
-        nn(rates.k1(T) * HI * e)
-        - nn(rates.k2(T) * HII * e)
-        + nn((rates.k3(T) * HeI / 4) * e)
-        - nn((rates.k6(T) * HeIII / 4) * e)
-        + nn((rates.k5(T) * HeII / 4) * e)
-        - nn((rates.k4(T) * HeII / 4) * e)
-    )
-
-    return creation - destruction
+# equation 13 in the asymptotic paper
+def prediction_2(F_p, k_n, dt, y_prev):
+    yn = (1 / (1 + k_n * dt)) * (y_prev + (F_p * dt))
+    return yn
 
 
-def dHeI_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = nn(rates.k4(T) * HeII * e)
+class HI:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
 
-    destruction = nn(rates.k3(T) * e * HeI)
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
+        positive_fluxes = [self.rates.k2(T) * HII * e]
+        destruction_rates = [
+            self.rates.k1(T) * e,
+            self.rates.k57(T) * HI,
+            self.rates.k58(T) * HeI / 4,
+        ]
 
-    return creation - destruction
+        # print("tm1", destruction_rates, sum(destruction_rates))
+
+        destruction = sum(list(map(lambda x: nn(x * HI), destruction_rates)))
+        creation = sum(list(map(lambda x: nn(x), positive_fluxes)))
+
+        F_p = sum(positive_fluxes)
+        k_n = sum(destruction_rates)
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = HI + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+        return diff
 
 
-def dHeII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = nn(rates.k3(T) * HeI * e + rates.k6(T) * HeIII * e)
+class HII:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
 
-    destruction = nn(rates.k4(T) * e * HeII) + nn(rates.k5(T) * e * HeII)
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
+        positive_fluxes = [
+            self.rates.k1(T) * HI * e,
+            self.rates.k57(T) * HI * HI,
+            self.rates.k58(T) * HI * HeI / 4,
+        ]
+        destruction_rates = [self.rates.k2(T) * e]
+        destruction = sum(list(map(lambda x: nn(x * HII), destruction_rates)))
+        creation = sum(list(map(lambda x: nn(x), positive_fluxes)))
 
-    return creation - destruction
+        F_p = sum(positive_fluxes)
+        k_n = sum(destruction_rates)
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = HII + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+
+        return diff
 
 
-def dHeIII_dt(rates, HI, HII, HeI, HeII, HeIII, e, T):
-    creation = nn(rates.k5(T) * HeII * e)
+class e:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
 
-    destruction = nn(rates.k6(T) * e * HeIII)
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
 
-    return creation - destruction
+        creation = nn(self.rates.k57(T) * HI * HI) + nn(
+            self.rates.k58(T) * HI * HeI / 4
+        )
+
+        destruction = -(
+            nn(self.rates.k1(T) * HI * e)
+            - nn(self.rates.k2(T) * HII * e)
+            + nn((self.rates.k3(T) * HeI / 4) * e)
+            - nn((self.rates.k6(T) * HeIII / 4) * e)
+            + nn((self.rates.k5(T) * HeII / 4) * e)
+            - nn((self.rates.k4(T) * HeII / 4) * e)
+        )
+
+        F_p = self.rates.k57(T) * HI * HI + self.rates.k58(T) * HI * HeI / 4
+        k_n = -(
+            self.rates.k1(T) * HI
+            - self.rates.k2(T) * HII
+            + self.rates.k3(T) * HeI / 4
+            - self.rates.k6(T) * HeIII / 4
+            + self.rates.k5(T) * HeII / 4
+            - self.rates.k4(T) * HeII / 4
+        )
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = e + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+        return diff
 
 
-odes = [dHI_dt, dHII_dt, dHeI_dt, dHeII_dt, dHeIII_dt, de_dt]
+class HeI:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
+
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
+        creation = nn(self.rates.k4(T) * HeII * e)
+        destruction = nn(self.rates.k3(T) * e * HeI)
+
+        F_p = self.rates.k4(T) * HeII * e
+        k_n = self.rates.k3(T) * e
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = HeI + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+
+        return diff
+
+
+class HeII:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
+
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
+
+        positive_fluxes = [self.rates.k3(T) * HeI * e, self.rates.k6(T) * HeIII * e]
+        destruction_rates = [self.rates.k4(T) * e, self.rates.k5(T) * e]
+
+        destruction = sum(list(map(lambda x: nn(x * HeII), destruction_rates)))
+        creation = sum(list(map(lambda x: nn(x), positive_fluxes)))
+
+        F_p = sum(positive_fluxes)
+        k_n = sum(destruction_rates)
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = HeII + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+
+        return diff
+
+
+class HeIII:
+    F_p = []
+    k_n = []
+    y_n = []
+    rates = None
+
+    def next(self, HI, HII, HeI, HeII, HeIII, e, T, dt, save_results=True):
+
+        positive_fluxes = [self.rates.k5(T) * HeII * e]
+        destruction_rates = [self.rates.k6(T) * e]
+
+        destruction = sum(list(map(lambda x: nn(x * HeIII), destruction_rates)))
+        creation = sum(list(map(lambda x: nn(x), positive_fluxes)))
+
+        F_p = sum(positive_fluxes)
+        k_n = sum(destruction_rates)
+
+        if len(self.F_p) <= 1 or abs(k_n * dt) >= 1:
+            diff = HeIII + (creation - destruction) * dt
+        else:
+            k_n_prev = self.k_n[len(self.k_n) - 2]
+            F_p_prev = self.F_p[len(self.F_p) - 2]
+            y_prev = self.y_n[len(self.y_n) - 2]
+            # diff = prediction_1(
+            #     F_p,
+            #     k_n,
+            #     k_n_prev,
+            #     F_p_prev,
+            #     y_prev,
+            #     dt,
+            # )
+
+            diff = prediction_2(F_p, k_n, dt, y_prev)
+
+        if save_results:
+            self.F_p.append(F_p)
+            self.k_n.append(k_n)
+            self.y_n.append(diff)
+
+        return diff
+
+
+odes = [HI(), HII(), HeI(), HeII(), HeIII(), e()]
 species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
 
 
-def flux_limited_solver(equations, initial_conditions, t_span, T, rates):
-    dt = abs(initial_conditions[0] / dHI_dt(rates, *initial_conditions, T)) * 0.001
+def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
+    for eq in equations:
+        eq.rates = rates
+    dt = (
+        abs(initial_conditions[0] / odes[0].next(*initial_conditions, T, 0, False))
+        * 0.0001
+    )
 
     print(f"timestep: {dt *  3.1536e13}s")
     t0, tf = t_span
@@ -80,15 +318,23 @@ def flux_limited_solver(equations, initial_conditions, t_span, T, rates):
     print(f"number of time steps: {n}")
     num_eqns = len(equations)
     t = np.linspace(t0, tf, n + 1)
-    values = np.zeros((num_eqns, n + 1))
+    y_values = np.zeros((num_eqns, n + 1))
 
     for i, initial_value in enumerate(initial_conditions):
-        values[i, 0] = initial_value
+        y_values[i, 0] = initial_value
 
     rate_values = np.zeros((num_eqns, n + 1))
+
     for i in range(n):
         for j, eq in enumerate(equations):
-            values[j, i + 1] = values[j, i] + dt * eq(rates, *values[:, i], T)
-            rate_values[j, i + 1] = eq(rates, *values[:, i], T)
-    print("solver final state: ", values[:, n - 1])
-    return t, values, rate_values
+            rate = eq.next(
+                *y_values[:, i],
+                T,
+                dt,
+            )
+            # y_values[j, i + 1] = y_values[j, i] + dt * rate
+            y_values[j, i + 1] = rate
+            rate_values[j, i + 1] = rate
+    print("solver final state: ", y_values[:, n - 1])
+    print(y_values)
+    return t, y_values, rate_values

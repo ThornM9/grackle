@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 import os
 from pygrackle import chemistry_data, RateContainer
 from pygrackle.utilities.physical_constants import (
@@ -13,15 +14,20 @@ from networks.six_species.default import (
     euler_method_system as default_euler,
     species_names as default_species_names,
 )
-from networks.six_species.asymptotic import (
+from networks.six_species.flfd import (
     odes as flfd_odes,
     flux_limited_solver,
     species_names as flfd_species_names,
 )
-from networks.six_species.asymptotic_2 import (
+from networks.six_species.asymptotic import (
     odes as asymptotic_odes,
     asymptotic_methods_solver,
     species_names as asymptotic_species_names,
+)
+from networks.six_species.asymptotic_predictor_corrector import (
+    odes as asymptotic_pc_odes,
+    asymptotic_predictor_corrector_solver,
+    species_names as asymptotic_pc_species_names,
 )
 from networks.six_species.qss import (
     odes as qss_odes,
@@ -41,6 +47,11 @@ solver_configs = {
         asymptotic_methods_solver,
         asymptotic_odes,
         asymptotic_species_names,
+    ),
+    "asymptotic_pc": (
+        asymptotic_predictor_corrector_solver,
+        asymptotic_pc_odes,
+        asymptotic_pc_species_names,
     ),
     "qss": (qss_methods_solver, qss_odes, qss_species_names),
 }
@@ -162,6 +173,7 @@ def solve_network(
             plt.plot(pred_t, pred_y[i], label=f"{species_names[i]} Solution")
 
     # plt.plot(t, total, label="total")
+    plt.title("Solution")
     plt.xlabel("Time (Myr)")
     plt.ylabel("Density (g/cm^3)")
     plt.legend()
@@ -171,12 +183,17 @@ def solve_network(
     print("plotting prediction")
     for i in range(len(exp_y)):
         if i < len(species_names):
-            plt.plot(exp_t, exp_y[i], label=f"{species_names[i]} Predicted")
+            plt.plot(
+                exp_t,
+                exp_y[i],
+                label=f"{species_names[i]} Predicted",
+            )
 
     # total = np.sum(exp_y, 0)
     # total -= exp_y[5]  # don't include the electron density
-    # plt.plot(exp_t, total, label="total")
+    # plt.plot(exp_t, total, label="total density")
 
+    plt.title(f"{network_name} Prediction")
     plt.xlabel("Time (Myr)")
     plt.ylabel("Density (g/cm^3)")
     plt.legend()
@@ -213,7 +230,7 @@ if __name__ == "__main__":
     solve_network(
         rates,
         initial_conditions,
-        (0, 0.1),
+        (0, 0.01),
         T,
         error_threshold,
         check_error=False,

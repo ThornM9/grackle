@@ -1,6 +1,6 @@
 import numpy as np
-import math
 from collections import namedtuple
+from .odes import HI, HII, HeI, HeII, HeIII, e
 
 Rates = namedtuple(
     "Rates", ["positive_fluxes", "destruction_rates", "destruction_sign"], defaults=[1]
@@ -40,92 +40,6 @@ def corrector(y0, k0, kp, F_p0, F_pp, dt):
     return yc
 
 
-class HI:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [self.rates.k2(T) * HII * e]
-        destruction_rates = [
-            self.rates.k1(T) * e,
-            self.rates.k57(T) * HI,
-            self.rates.k58(T) * HeI / 4,
-        ]
-
-        return Rates(positive_fluxes, destruction_rates)
-
-
-class HII:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [
-            self.rates.k1(T) * HI * e,
-            self.rates.k57(T) * HI * HI,
-            self.rates.k58(T) * HI * HeI / 4,
-        ]
-        destruction_rates = [self.rates.k2(T) * e]
-
-        return Rates(positive_fluxes, destruction_rates)
-
-
-class e:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [
-            self.rates.k57(T) * HI * HI,
-            self.rates.k58(T) * HI * HeI / 4,
-        ]
-        destruction_rates = [
-            self.rates.k1(T) * HI,
-            -self.rates.k2(T) * HII,
-            +self.rates.k3(T) * HeI / 4,
-            -self.rates.k6(T) * HeIII / 4,
-            +self.rates.k5(T) * HeII / 4,
-            -self.rates.k4(T) * HeII / 4,
-        ]
-
-        destruction_sign = -1
-
-        return Rates(positive_fluxes, destruction_rates, destruction_sign)
-
-
-class HeI:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [self.rates.k4(T) * HeII * e]
-        destruction_rates = [self.rates.k3(T) * e]
-
-        return Rates(positive_fluxes, destruction_rates)
-
-
-class HeII:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [self.rates.k3(T) * HeI * e, self.rates.k6(T) * HeIII * e]
-        destruction_rates = [self.rates.k4(T) * e, self.rates.k5(T) * e]
-
-        return Rates(positive_fluxes, destruction_rates)
-
-
-class HeIII:
-    def __init__(self, rates):
-        self.rates = rates
-
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
-        positive_fluxes = [self.rates.k5(T) * HeII * e]
-        destruction_rates = [self.rates.k6(T) * e]
-
-        return Rates(positive_fluxes, destruction_rates)
-
-
 odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None)]
 species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
 
@@ -133,10 +47,7 @@ species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
 def qss_methods_solver(equations, initial_conditions, t_span, T, rates):
     for eq in equations:
         eq.rates = rates
-    # dt = (
-    #     abs(initial_conditions[0] / odes[0].next(*initial_conditions, T, 0, False))
-    #     * 0.0001
-    # )
+
     HI_rate = odes[0].get_rates(*initial_conditions, T)
     dt = abs(
         initial_conditions[0]
@@ -192,6 +103,5 @@ def qss_methods_solver(equations, initial_conditions, t_span, T, rates):
 
             y_values[j, i + 1] = y_values[j, i] + dt * rate
             rate_values[j, i + 1] = rate
-            # y_values[j, i + 1] = yc
     print("solver final state: ", y_values[:, n - 1])
     return t, y_values, rate_values
