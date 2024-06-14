@@ -29,6 +29,11 @@ from networks.six_species.qss import (
     qss_methods_solver,
     species_names as qss_species_names,
 )
+from networks.six_species.pe import (
+    odes as pe_odes,
+    pe_solver,
+    species_names as pe_species_names,
+)
 import similaritymeasures
 from test import test_equilibrium
 from networks.six_species.odes import get_cloudy_rates
@@ -45,6 +50,7 @@ solver_configs = {
         asymptotic_species_names,
     ),
     "qss": (qss_methods_solver, qss_odes, qss_species_names),
+    "pe": (pe_solver, pe_odes, pe_species_names),
 }
 
 
@@ -225,5 +231,5 @@ if __name__ == "__main__":
         T,
         error_threshold,
         check_error=False,
-        network_name="asymptotic",
+        network_name="pe",
     )

@@ -19,15 +19,17 @@
 
 
 import numpy as np
-from odes import HI, HII, HeI, HeII, HeIII, e
+from .odes import HI, HII, HeI, HeII, HeIII, e, get_cloudy_rates
 import math
 from collections import namedtuple
+from .timesteppers import constant_timestepper, simple_timestepper
 
 # data structure to store all config info about the reaction groups in this network
 ReactionGroup = namedtuple(
     "ReactionGroup", ["ya_idx", "yb_idx", "yc_idx", "equilibrated"], defaults=[False]
 )
 
+# TODO move the get_kf and get_kr functions into this reaction group config and move it to odes.py since it is dependent on the specific network
 # reaction group configs
 rg_cfg = {
     0: ReactionGroup(1, 5, 0, False),
@@ -37,7 +39,6 @@ rg_cfg = {
 
 
 def get_kf(rg_num, rates, T):
-    # TODO this can be moved into the reaction group config to be cleaner
     if rg_num == 0:
         return rates.k2(T)
     if rg_num == 1:
@@ -47,9 +48,15 @@ def get_kf(rg_num, rates, T):
     raise Exception("Invalid reaction group number")
 
 
-def get_kr(rg_num, rates, T):
-    # TODO this isn't implemented yet
-    return get_kf(rg_num, rates, T) * 0.9
+def get_kr(rg_num):
+    cloudy = get_cloudy_rates()
+    if rg_num == 0:
+        return cloudy["piHI"]
+    if rg_num == 1:
+        return cloudy["piHeI"]
+    if rg_num == 2:
+        return cloudy["piHeII"]
+    raise Exception("Invalid reaction group number")
 
 
 # gets the relevant ya, yb and yc for the class B reaction groups
@@ -61,18 +68,10 @@ def get_rg_abundances(rg_num, abundances):
     )
 
 
-def is_equilibrated(rg_num, abundances, rates, T):
-    if rg_num == -1:
-        return False
-
-    rg = rg_cfg[rg_num]
-    if rg.equilibrated:
-        return True
-
-    eps = 0.01  # error tolerance to check equilibrium
-
+def calculate_equilibrium_values(rg_num, abundances, rates, T):
+    # TODO this will need to be adjusted to add other reaction group types other than B
     kf = get_kf(rg_num, rates, T)
-    kr = get_kr(rg_num, rates, T)
+    kr = get_kr(rg_num)
     ya, yb, yc = get_rg_abundances(rg_num, abundances)
 
     c1 = yb - ya
@@ -88,6 +87,24 @@ def is_equilibrated(rg_num, abundances, rates, T):
     ya_eq = -(1 / 2 * a) * (b + math.sqrt(-q))
     yb_eq = c1 + ya_eq
     yc_eq = c2 - yb_eq
+
+    return (ya_eq, yb_eq, yc_eq)
+
+
+def is_equilibrated(rg_num, abundances, rates, T):
+    # TODO needs adjustment for other reaction group types
+    if rg_num == -1:
+        return False
+
+    rg = rg_cfg[rg_num]
+    if rg.equilibrated:
+        return True
+
+    eps = 0.01  # error tolerance to check equilibrium
+
+    ya, yb, yc = get_rg_abundances(rg_num, abundances)
+
+    ya_eq, yb_eq, yc_eq = calculate_equilibrium_values(rg_num, abundances, rates, T)
 
     # differences between equilibrium values and current values
     ya_diff = abs(ya - ya_eq) / ya
@@ -138,23 +155,22 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
     print(f"timestep: {dt *  3.1536e13}s")
     t0, tf = t_span
     n = int((tf - t0) / dt)
-    print(f"number of time steps: {n}")
+    # print(f"number of time steps: {n}")
     num_eqns = len(equations)
     t = np.linspace(t0, tf, n + 1)
-    y_values = np.zeros((num_eqns, n + 1))
+    y_values = np.zeros((num_eqns, 1))
 
     for i, initial_value in enumerate(initial_conditions):
         y_values[i, 0] = initial_value
 
     rate_values = np.zeros((num_eqns, n + 1))
 
-    for i in range(n):
+    def update(equation_rates, y_values, i, dt):
+        start_population = sum(y_values[:, i])
         abundances = y_values[:, i]
-        for j, eq in enumerate(equations):
-            er = eq.get_rates(
-                *abundances,
-                T,
-            )
+        for j in range(len(equation_rates)):
+            er = equation_rates[j]
+            eq = equations[j]
             rgs = eq.get_reaction_groups()
 
             positive_fluxes = filter_equilibrated_fluxes(
@@ -174,7 +190,62 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
 
             y_values[j, i + 1] = y_values[j, i] + dt * rate
 
-            # TODO adjust the equil rgs back to equil
             rate_values[j, i + 1] = rate
-    print("solver final state: ", y_values[:, n - 1])
+
+        # adjust the equil rgs back to equil
+        restore_equilibrium_values = [[] for _ in range(len(rg_cfg))]
+        for rg_num, rg in rg_cfg.items():
+            if rg.equilibrated:
+                ya_idx, yb_idx, yc_idx = rg.ya_idx, rg.yb_idx, rg.yc_idx
+
+                ya_eq, yb_eq, yc_eq = calculate_equilibrium_values(
+                    rg_num, y_values[:, i], rates, T
+                )
+
+                restore_equilibrium_values[ya_idx].append(ya_eq)
+                restore_equilibrium_values[yb_idx].append(yb_eq)
+                restore_equilibrium_values[yc_idx].append(yc_eq)
+
+        for j in range(len(restore_equilibrium_values)):
+            if len(restore_equilibrium_values[j]) > 0:
+                y_values[j, i + 1] = sum(restore_equilibrium_values[j]) / len(
+                    restore_equilibrium_values[j]
+                )
+
+        end_population = sum(y_values[:, i + 1])
+        # print("ratio: ", start_population / end_population)
+        # y_values[:, i + 1] = y_values[:, i + 1] * start_population / end_population
+
+    trial_timestep_tol = 0.1
+    conservation_tol = 0.05
+    conservation_satisfied_tol = 0.001
+    decrease_dt_factor = 0.2
+    increase_dt_factor = 0.2
+    t, y_values = simple_timestepper(
+        y_values,
+        equations,
+        update,
+        dt,
+        t0,
+        tf,
+        trial_timestep_tol,
+        conservation_tol,
+        conservation_satisfied_tol,
+        decrease_dt_factor,
+        increase_dt_factor,
+        T,
+    )
+
+    # t, y_values = constant_timestepper(
+    #     y_values,
+    #     equations,
+    #     update,
+    #     dt,
+    #     t0,
+    #     tf,
+    #     T,
+    # )
+
+    print(f"number of time steps: {len(t)}")
+
     return t, y_values, rate_values
