@@ -24,6 +24,11 @@ from networks.six_species.asymptotic import (
     asymptotic_methods_solver,
     species_names as asymptotic_species_names,
 )
+from networks.six_species.asymptotic_timestepper import (
+    odes as asym_ts_odes,
+    asymptotic_methods_solver as asym_ts_solver,
+    species_names as asym_ts_species_names,
+)
 from networks.six_species.asymptotic_predictor_corrector import (
     odes as asymptotic_pc_odes,
     asymptotic_predictor_corrector_solver,
@@ -48,6 +53,7 @@ solver_configs = {
         asymptotic_odes,
         asymptotic_species_names,
     ),
+    "asymptotic_ts": (asym_ts_solver, asym_ts_odes, asym_ts_species_names),
     "asymptotic_pc": (
         asymptotic_predictor_corrector_solver,
         asymptotic_pc_odes,

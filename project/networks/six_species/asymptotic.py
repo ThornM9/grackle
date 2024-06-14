@@ -1,5 +1,6 @@
 import numpy as np
-from .odes import HI, HII, HeI, HeII, HeIII, e
+from .odes import HI, HII, HeI, HeII, HeIII, e, Energy
+from .timesteppers import simple_timestepper, constant_timestepper
 
 
 USE_FLFD = False
@@ -34,8 +35,46 @@ def prediction_2(F_p, k_n, dt, y_prev):
     return yn
 
 
-odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None)]
+odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy(None)]
 species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
+
+
+def calculate_trial_timestep(equation_rates, y_values, i, trial_timestep_tolerance):
+    max_dts = []
+    for j in range(len(equation_rates)):
+        er = equation_rates[j]
+        k_n = sum(er.destruction_rates) * er.destruction_sign
+        creation = sum(er.positive_fluxes)
+        destruction = k_n * y_values[j, i]
+        y = y_values[j, i]
+
+        if creation > destruction:
+            new_y = y + y * trial_timestep_tolerance
+        elif creation < destruction:
+            new_y = y - y * trial_timestep_tolerance
+        else:
+            continue
+        max_dt = (new_y - y) / (creation - destruction)
+        max_dts.append(max_dt)
+
+    if len(max_dts) == 0:
+        return float("inf")
+    return max(max_dts)
+
+
+def update(equation_rates, y_values, i, dt):
+    for j in range(len(equation_rates)):
+        er = equation_rates[j]
+
+        y_prev = y_values[j, i]
+        k_n = sum(er.destruction_rates) * er.destruction_sign
+        creation = sum(er.positive_fluxes)
+        destruction = k_n * y_values[j, i]
+
+        if i == 0 or abs(k_n * dt) >= 1:
+            y_values[j, i + 1] = y_values[j, i] + dt * (creation - destruction)
+        else:
+            y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
 
 
 def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
@@ -43,61 +82,58 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
         eq.rates = rates
 
     HI_rate = odes[0].get_rates(*initial_conditions, T)
+
+    t0, tf = t_span
+    num_eqns = len(equations)
+    # TODO this solution just adds one row to the array at a time, computationally inefficient.
+    # improve by pre allocating larger arrays as needed during runtime
+    y_values = np.zeros((num_eqns, 1))
+
+    for i, initial_value in enumerate(initial_conditions):
+        y_values[i, 0] = initial_value
+
     dt = abs(
         initial_conditions[0]
         / (
             sum(HI_rate.positive_fluxes)
             - sum(HI_rate.destruction_rates) * initial_conditions[0]
         )
-        * 0.0001
+        * 0.00001
     )
 
-    print(f"timestep: {dt *  3.1536e13}s")
-    t0, tf = t_span
-    n = int((tf - t0) / dt)
-    print(f"number of time steps: {n}")
-    num_eqns = len(equations)
-    t = np.linspace(t0, tf, n + 1)
-    y_values = np.zeros((num_eqns, n + 1))
+    trial_timestep_tol = 0.1
+    conservation_tol = 0.001
+    conservation_satisfied_tol = 0.001
+    decrease_dt_factor = 0.1
+    increase_dt_factor = 0.1
 
-    for i, initial_value in enumerate(initial_conditions):
-        y_values[i, 0] = initial_value
+    # t, y_values = simple_timestepper(
+    #     y_values,
+    #     equations,
+    #     update,
+    #     dt,
+    #     t0,
+    #     tf,
+    #     trial_timestep_tol,
+    #     conservation_tol,
+    #     conservation_satisfied_tol,
+    #     decrease_dt_factor,
+    #     increase_dt_factor,
+    #     T,
+    # )
 
-    rate_values = np.zeros((num_eqns, n + 1))
+    t, y_values = constant_timestepper(
+        y_values,
+        equations,
+        update,
+        dt,
+        t0,
+        tf,
+        T,
+    )
 
-    # these are arrays which store the value of their calculation from the previous timestep.
-    # initial value is infinity so incorrect use of the array will hopefully be obvious in results
-    k_ns = [float("inf") for _ in range(len(equations))]
-    F_ps = [float("inf") for _ in range(len(equations))]
+    # print(t.shape, y_values.shape)
 
-    using = 0
-    for i in range(n):
-        for j, eq in enumerate(equations):
-            er = eq.get_rates(
-                *y_values[:, i],
-                T,
-            )
-            y_prev = y_values[j, i]
-            k_n = sum(er.destruction_rates) * er.destruction_sign
-            creation = sum(er.positive_fluxes)
-            destruction = k_n * y_values[j, i]
+    print(f"number of time steps: {len(t)}")
 
-            if i == 0 or abs(k_n * dt) >= 1:
-                y_values[j, i + 1] = y_values[j, i] + dt * (creation - destruction)
-            else:
-                using += 1
-                k_n_prev = k_ns[j]
-                F_p_prev = F_ps[j]
-
-                # y_values[j, i + 1] = prediction_1(
-                #     creation, k_n, k_n_prev, F_p_prev, y_prev, dt
-                # )
-                y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
-
-            k_ns[j] = k_n
-            F_ps[j] = creation
-
-    print(f"used {using} / {n * len(equations)}")
-    # print("solver final state: ", y_values[:, n - 1])
-    # print(y_values)
-    return t, y_values, rate_values
+    return t, y_values, None
