@@ -43,7 +43,6 @@ from networks.six_species.odes import get_cloudy_rates
 # map a config name to the solver, list of odes and the species names
 solver_configs = {
     "default": (default_euler, default_odes, default_species_names),
-    "flfd": (flux_limited_solver, flfd_odes, flfd_species_names),
     "asymptotic": (
         asymptotic_methods_solver,
         asymptotic_odes,

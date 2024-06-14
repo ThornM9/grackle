@@ -1,18 +1,11 @@
 import numpy as np
 from collections import namedtuple
 from .odes import HI, HII, HeI, HeII, HeIII, e
+from .timesteppers import simple_timestepper, constant_timestepper
 
 Rates = namedtuple(
     "Rates", ["positive_fluxes", "destruction_rates", "destruction_sign"], defaults=[1]
 )
-
-USE_FLFD = False
-
-
-def nn(x):
-    if USE_FLFD:
-        return max(x, 0)
-    return x
 
 
 # equation 4 in qss paper
@@ -60,26 +53,19 @@ def qss_methods_solver(equations, initial_conditions, t_span, T, rates):
 
     print(f"timestep: {dt *  3.1536e13}s")
     t0, tf = t_span
-    n = int((tf - t0) / dt)
-    print(f"number of time steps: {n}")
     num_eqns = len(equations)
-    t = np.linspace(t0, tf, n + 1)
-    y_values = np.zeros((num_eqns, n + 1))
+    y_values = np.zeros((num_eqns, 1))
 
     for i, initial_value in enumerate(initial_conditions):
         y_values[i, 0] = initial_value
 
-    rate_values = np.zeros((num_eqns, n + 1))
-
-    for i in range(n):
+    def update(equation_rates, y_values, i, dt):
         predictors = []
         initial_destruction_rates = []
         initial_positive_fluxes = []
-        for j, eq in enumerate(equations):
-            er = eq.get_rates(
-                *y_values[:, i],
-                T,
-            )
+        for j in range(len(equation_rates)):
+            er = equation_rates[j]
+
             y0 = y_values[j, i]
             k0 = sum(er.destruction_rates) * er.destruction_sign
             F_p0 = sum(er.positive_fluxes)
@@ -102,6 +88,37 @@ def qss_methods_solver(equations, initial_conditions, t_span, T, rates):
             rate = corrector(y0, k0, kp, F_p0, F_pp, dt)
 
             y_values[j, i + 1] = y_values[j, i] + dt * rate
-            rate_values[j, i + 1] = rate
-    print("solver final state: ", y_values[:, n - 1])
-    return t, y_values, rate_values
+
+    trial_timestep_tol = 0.1
+    conservation_tol = 0.001
+    conservation_satisfied_tol = 0.001
+    decrease_dt_factor = 0.1
+    increase_dt_factor = 0.1
+
+    # t, y_values = simple_timestepper(
+    #     y_values,
+    #     equations,
+    #     update,
+    #     dt,
+    #     t0,
+    #     tf,
+    #     trial_timestep_tol,
+    #     conservation_tol,
+    #     conservation_satisfied_tol,
+    #     decrease_dt_factor,
+    #     increase_dt_factor,
+    #     T,
+    # )
+
+    t, y_values = constant_timestepper(
+        y_values,
+        equations,
+        update,
+        dt,
+        t0,
+        tf,
+        T,
+    )
+    print(f"number of time steps: {len(t)}")
+
+    return t, y_values, None

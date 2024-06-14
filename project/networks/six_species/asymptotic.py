@@ -3,15 +3,6 @@ from .odes import HI, HII, HeI, HeII, HeIII, e
 from .timesteppers import simple_timestepper, constant_timestepper
 
 
-USE_FLFD = False
-
-
-def nn(x):
-    if USE_FLFD:
-        return max(x, 0)
-    return x
-
-
 # equation 12 in the asymptotic paper
 def prediction_1(F_p, k_n, k_n_prev, F_p_prev, y_prev, dt):
 
