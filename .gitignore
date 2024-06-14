@@ -25,6 +25,8 @@ Make.config.machine
 Make.config.override
 *.mod
 
+project/outputs
+
 src/clib/auto_show_config.c
 src/clib/auto_show_flags.c
 src/clib/auto_get_version.c

@@ -24,16 +24,6 @@ from networks.six_species.asymptotic import (
     asymptotic_methods_solver,
     species_names as asymptotic_species_names,
 )
-from networks.six_species.asymptotic_timestepper import (
-    odes as asym_ts_odes,
-    asymptotic_methods_solver as asym_ts_solver,
-    species_names as asym_ts_species_names,
-)
-from networks.six_species.asymptotic_predictor_corrector import (
-    odes as asymptotic_pc_odes,
-    asymptotic_predictor_corrector_solver,
-    species_names as asymptotic_pc_species_names,
-)
 from networks.six_species.qss import (
     odes as qss_odes,
     qss_methods_solver,
@@ -41,6 +31,7 @@ from networks.six_species.qss import (
 )
 import similaritymeasures
 from test import test_equilibrium
+from networks.six_species.odes import get_cloudy_rates
 
 
 # TODO species names can just be the one variable
@@ -52,12 +43,6 @@ solver_configs = {
         asymptotic_methods_solver,
         asymptotic_odes,
         asymptotic_species_names,
-    ),
-    "asymptotic_ts": (asym_ts_solver, asym_ts_odes, asym_ts_species_names),
-    "asymptotic_pc": (
-        asymptotic_predictor_corrector_solver,
-        asymptotic_pc_odes,
-        asymptotic_pc_species_names,
     ),
     "qss": (qss_methods_solver, qss_odes, qss_species_names),
 }
@@ -206,17 +191,17 @@ def solve_network(
     plt.savefig(f"outputs/{network_name}_densities_prediction.png")
     plt.clf()
 
-    print("plotting rate values")
-    for i in range(len(exp_y)):
-        if i < len(species_names):
-            plt.plot(exp_t, rate_values[i], label=f"{species_names[i]} Rate")
+    # print("plotting rate values")
+    # for i in range(len(exp_y)):
+    #     if i < len(species_names):
+    #         plt.plot(exp_t, rate_values[i], label=f"{species_names[i]} Rate")
 
-    # plt.plot(t, total, label="total")
-    plt.xlabel("Time (Myr)")
-    plt.ylabel("Rate")
-    plt.legend()
-    plt.savefig(f"outputs/{network_name}_rate_values.png")
-    plt.clf()
+    # # plt.plot(t, total, label="total")
+    # plt.xlabel("Time (Myr)")
+    # plt.ylabel("Rate")
+    # plt.legend()
+    # plt.savefig(f"outputs/{network_name}_rate_values.png")
+    # plt.clf()
 
 
 if __name__ == "__main__":
@@ -236,7 +221,7 @@ if __name__ == "__main__":
     solve_network(
         rates,
         initial_conditions,
-        (0, 0.01),
+        (0, 0.05),
         T,
         error_threshold,
         check_error=False,
