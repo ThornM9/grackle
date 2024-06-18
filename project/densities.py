@@ -226,7 +226,7 @@ if __name__ == "__main__":
     solve_network(
         rates,
         initial_conditions,
-        (0, 0.05),
+        (0, 0.06),
         T,
         error_threshold,
         check_error=False,

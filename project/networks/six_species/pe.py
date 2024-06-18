@@ -135,7 +135,7 @@ def filter_equilibrated_fluxes(flux_list, reaction_groups, abundances, rates, T)
 
 
 odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None)]
-species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
+species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
 
 
 def pe_solver(equations, initial_conditions, t_span, T, rates):
@@ -149,7 +149,7 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
             sum(HI_rate.positive_fluxes)
             - sum(HI_rate.destruction_rates) * initial_conditions[0]
         )
-        * 0.0001
+        * 0.001
     )
 
     print(f"timestep: {dt *  3.1536e13}s")
@@ -166,7 +166,7 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
     rate_values = np.zeros((num_eqns, n + 1))
 
     def update(equation_rates, y_values, i, dt):
-        start_population = sum(y_values[:, i])
+        start_population = sum(y_values[:5, i])
         abundances = y_values[:, i]
         for j in range(len(equation_rates)):
             er = equation_rates[j]
@@ -190,10 +190,10 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
 
             y_values[j, i + 1] = y_values[j, i] + dt * rate
 
-            rate_values[j, i + 1] = rate
+            # rate_values[j, i + 1] = rate
 
         # adjust the equil rgs back to equil
-        restore_equilibrium_values = [[] for _ in range(len(rg_cfg))]
+        restore_equilibrium_values = [[] for _ in range(len(equations))]
         for rg_num, rg in rg_cfg.items():
             if rg.equilibrated:
                 ya_idx, yb_idx, yc_idx = rg.ya_idx, rg.yb_idx, rg.yc_idx
@@ -212,15 +212,17 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
                     restore_equilibrium_values[j]
                 )
 
-        end_population = sum(y_values[:, i + 1])
+        end_population = sum(
+            y_values[:5, i + 1]
+        )  # exclude electron density from population scaling
         # print("ratio: ", start_population / end_population)
-        # y_values[:, i + 1] = y_values[:, i + 1] * start_population / end_population
+        # y_values[:5, i + 1] = y_values[:5, i + 1] * start_population / end_population
 
-    trial_timestep_tol = 0.1
-    conservation_tol = 0.05
+    trial_timestep_tol = 0.005
+    conservation_tol = 0.005
     conservation_satisfied_tol = 0.001
-    decrease_dt_factor = 0.2
-    increase_dt_factor = 0.2
+    decrease_dt_factor = 0.1
+    increase_dt_factor = 0.1
     t, y_values = simple_timestepper(
         y_values,
         equations,
@@ -235,6 +237,13 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
         increase_dt_factor,
         T,
     )
+    print(rg_cfg)
+    print(get_kf(0, rates, T), get_kr(0))
+    print(get_kf(1, rates, T), get_kr(1))
+    print(get_kf(2, rates, T), get_kr(2))
+    print(calculate_equilibrium_values(0, y_values[:, 0], rates, T))
+    print(calculate_equilibrium_values(1, y_values[:, 0], rates, T))
+    print(calculate_equilibrium_values(2, y_values[:, 0], rates, T))
 
     # t, y_values = constant_timestepper(
     #     y_values,

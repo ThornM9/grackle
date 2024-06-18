@@ -52,8 +52,12 @@ def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T
             # if j == 6:
             #     print(sum(er.destruction_rates), dt)
 
-        # update populations
-        update_func(ers, y_values, i, dt)
+        try:
+            # update populations
+            update_func(ers, y_values, i, dt)
+        except Exception as e:
+            print(e)
+            return t, y_values
 
     return t, y_values
 
@@ -78,6 +82,8 @@ def simple_timestepper(
     prev_T = T
     i = 0
     while curr_t < tf:
+        if i % 250 == 0:
+            print(f"timestep: {i}, time: {curr_t}")
         # add a row
         y_values = np.hstack((y_values, np.zeros((len(equations), 1))))
 
@@ -93,10 +99,19 @@ def simple_timestepper(
         # calculate trial timestep
         trial_dt = calculate_trial_timestep(ers, y_values, i, trial_timestep_tol)
 
+        # if trial_dt < dt:
+        #     print("using trial")
         dt = min(dt, trial_dt)
+        t = np.append(t, t[-1] + dt)
 
         # update pops with asym algo
-        update_func(ers, y_values, i, dt)
+        try:
+            # update populations
+            update_func(ers, y_values, i, dt)
+        except Exception as e:
+            y_values[:, -1] = 0
+            raise e
+            return t, y_values
 
         # check populations are conserved
         old_pop = np.sum(y_values[:, i])
@@ -104,19 +119,30 @@ def simple_timestepper(
 
         # increase/decrease dt if needed
         population_difference = abs(new_pop - old_pop) / old_pop
+        # print("pop diff: ", population_difference)
 
-        if population_difference > conservation_tol:
-            dt = dt * (1 - decrease_dt_factor)
+        changed_dt = False
 
-        if population_difference < conservation_satisfied_tol:
-            dt = dt * (1 + increase_dt_factor)
+        if curr_t < 0.05:
+            if population_difference > conservation_tol:
+                changed_dt = True
+                dt = dt * (1 - decrease_dt_factor)
+
+            if population_difference < conservation_satisfied_tol:
+                changed_dt = True
+                dt = dt * (1 + increase_dt_factor)
 
         # recalculate populations with asym algo
-        # TODO check if the dt has changed before doing this
-        y_values[:, i + 1] = 0
-        update_func(ers, y_values, i, dt)
+        if changed_dt:
+            y_values[:, i + 1] = 0
+            try:
+                # update populations
+                update_func(ers, y_values, i, dt)
+            except Exception as e:
+                print(e)
+                y_values[:, -1] = 0
+                return t, y_values
 
-        t = np.append(t, t[-1] + dt)
         curr_t += dt
         i += 1
 
