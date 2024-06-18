@@ -2,6 +2,11 @@ import numpy as np
 from collections import namedtuple
 import h5py
 import os
+from pygrackle.utilities.physical_constants import (
+    mass_hydrogen_cgs,
+    sec_per_Myr,
+    cm_per_mpc,
+)
 
 
 Rates = namedtuple(
@@ -21,9 +26,8 @@ class HI:
     def get_reaction_groups(self):
         return ReactionGroups([0], [-1, -1, -1])
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
-
         positive_fluxes = [self.rates.k2(T) * HII * e]
         destruction_rates = [
             self.rates.k1(T) * e,
@@ -42,9 +46,8 @@ class HII:
     def get_reaction_groups(self):
         return ReactionGroups([-1, -1, -1], [0])
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
-
         positive_fluxes = [
             self.rates.k1(T) * HI * e,
             self.rates.k57(T) * HI * HI,
@@ -66,7 +69,7 @@ class e:
             [-1, 0, -1, 1, -1, 2],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
         # TODO: add the photoionization rates
         positive_fluxes = [
@@ -99,9 +102,8 @@ class HeI:
             [-1],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
-
         positive_fluxes = [self.rates.k4(T) * HeII * e]
         destruction_rates = [self.rates.k3(T) * e, cloudy["piHeI"]]
 
@@ -118,7 +120,7 @@ class HeII:
             [1, -1],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
 
         positive_fluxes = [
@@ -145,13 +147,73 @@ class HeIII:
             [2],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, T):
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
         cloudy = get_cloudy_rates()
 
         positive_fluxes = [self.rates.k5(T) * HeII * e, cloudy["piHeII"] * HeII]
         destruction_rates = [self.rates.k6(T) * e]
 
         return Rates(positive_fluxes, destruction_rates)
+
+
+class Energy:
+    def __init__(self, rates):
+        self.rates = rates
+
+    def get_reaction_groups(self):
+        return ReactionGroups([], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+
+    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+        print("tm1", self.rates.comp())
+        positive_fluxes = []
+        destruction_rates = [
+            # collisional excitations
+            self.rates.ceHI(T) * HI * e,
+            self.rates.ceHeI(T) * HeII * (e**2) / 4,
+            self.rates.ceHeII(T) * HeII * e / 4,
+            # collisional ionizations
+            self.rates.ciHI(T) * HI * e,
+            self.rates.ciHeI(T) * HeI * e / 4,
+            self.rates.ciHeII(T) * HeII * e / 4,
+            self.rates.ciHeIS(T) * HeII * (e**2) / 4,
+            # recombinations
+            self.rates.reHII(T) * HII * e,
+            self.rates.reHeII1(T) * HeII * e / 4,
+            self.rates.reHeII2(T) * HeII * e / 4,
+            self.rates.reHeIII(T) * HeIII * e / 4,
+            # brem
+            self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
+        ]
+
+        return Rates(positive_fluxes, destruction_rates)
+
+
+def calculate_temp_from_energy(HI, HII, HeI, HeII, HeIII, e, E, prevT):
+    mu = (HeI + HeII + HeIII) / 4 + HI + HII + e
+
+    gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
+    mh = 1.67262171e-24  # mass of hydrogen atom (grams)
+    k = 1.3806504e-16  # boltzmann constant
+    # T = (gamma - 1) * mu * E * mh / k
+
+    velocity_units = cm_per_mpc / sec_per_Myr
+    temperature_units = mh * velocity_units**2 / k
+    return temperature_units / max(mu, 1e-20)
+    # return 0.5 * (T + prevT)
+
+
+def calculate_energy_from_temp(HI, HII, HeI, HeII, HeIII, e, T):
+    mu = (HeI + HeII + HeIII) / 4 + HI + HII + e
+
+    gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
+    mh = 1.67262171e-24  # mass of hydrogen
+    k = 1.3806504e-16  # boltzmann constant
+    E = k * T / ((gamma - 1) * mu * mh)
+
+    # velocity_units = cm_per_mpc / sec_per_Myr
+    # temperature_units = mh * velocity_units**2 / k
+    # return temperature_units / max(mu, 1e-20)
+    # return E
 
 
 def get_cloudy_rates():
