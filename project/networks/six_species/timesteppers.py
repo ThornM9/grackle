@@ -1,6 +1,5 @@
 import numpy as np
-
-# from .odes import calculate_temp_from_energy
+from .odes import calculate_temp_from_energy
 
 ### HELPERS ###
 
@@ -43,7 +42,7 @@ def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T
     dt = initial_dt
     prev_T = T
     for i in range(n):
-        # T = calculate_temp_from_energy(*y_values[:, i], prev_T)
+        T = calculate_temp_from_energy(*y_values[:, i], equations[0].rates, prev_T)
         # calculate rates and fluxes
         ers = []
         for j, eq in enumerate(equations):
@@ -57,7 +56,10 @@ def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T
             update_func(ers, y_values, i, dt)
         except Exception as e:
             print(e)
+            raise e
             return t, y_values
+
+        prev_T = T
 
     return t, y_values
 

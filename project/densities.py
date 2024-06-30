@@ -34,10 +34,16 @@ from networks.six_species.pe import (
     pe_solver,
     species_names as pe_species_names,
 )
+from networks.six_species.odes import (
+    calculate_temp_from_energy,
+    calculate_energy_from_temp,
+    calculate_mu,
+)
 import similaritymeasures
 from test import test_equilibrium
 from networks.six_species.odes import get_cloudy_rates
 
+# todo reduce number density for pe to test that partial equilibrium works
 
 # TODO species names can just be the one variable
 # map a config name to the solver, list of odes and the species names
@@ -59,9 +65,9 @@ def get_rates():
     # Set solver parameters
     my_chemistry = chemistry_data()
     my_chemistry.use_grackle = 1
-    my_chemistry.with_radiative_cooling = 0
+    my_chemistry.with_radiative_cooling = 1
     my_chemistry.primordial_chemistry = 1
-    my_chemistry.metal_cooling = 1
+    my_chemistry.metal_cooling = 0
     my_chemistry.UVbackground = 1
     my_chemistry.self_shielding_method = 0
     my_chemistry.H2_self_shielding = 0
@@ -71,9 +77,6 @@ def get_rates():
         "utf-8",
     )
     my_chemistry.grackle_data_file = grackle_data_file
-
-    my_chemistry.use_specific_heating_rate = 1
-    my_chemistry.use_volumetric_heating_rate = 1
 
     # Set units
     my_chemistry.comoving_coordinates = 0  # proper units
@@ -120,21 +123,16 @@ def solve_network(
 
     solver, odes, species_names = solver_configs[network_name]
 
-    # initial_rates = []
-    # for ode in odes:
-    #     initial_rates.append(ode(rates, *initial_conditions, T))
-    # print("initial rates: ", initial_rates)
-
-    print("solution solver")
-    solution = solve_ivp(
-        network,
-        t_span,
-        initial_conditions,
-        method="BDF",
-        args=(default_odes, T, rates),
-    )
-    pred_t = solution.t
-    pred_y = solution.y
+    # print("solution solver")
+    # solution = solve_ivp(
+    #     network,
+    #     t_span,
+    #     initial_conditions,
+    #     method="BDF",
+    #     args=(default_odes, T, rates),
+    # )
+    # pred_t = solution.t
+    # pred_y = solution.y
 
     print("custom solver")
     exp_t, exp_y, rate_values = solver(odes, initial_conditions, t_span, T, rates)
@@ -162,11 +160,11 @@ def solve_network(
     if not plot_results:
         return
 
-    print("plotting solution")
-    # total = np.zeros(values[0].shape)
-    for i in range(len(pred_y)):
-        if i < len(species_names):
-            plt.plot(pred_t, pred_y[i], label=f"{species_names[i]} Solution")
+    # print("plotting solution")
+    # # total = np.zeros(values[0].shape)
+    # for i in range(len(pred_y)):
+    #     if i < len(species_names):
+    #         plt.plot(pred_t, pred_y[i], label=f"{species_names[i]} Solution")
 
     # plt.plot(t, total, label="total")
     plt.title("Solution")
@@ -196,39 +194,106 @@ def solve_network(
     plt.savefig(f"outputs/{network_name}_densities_prediction.png")
     plt.clf()
 
-    # print("plotting rate values")
-    # for i in range(len(exp_y)):
-    #     if i < len(species_names):
-    #         plt.plot(exp_t, rate_values[i], label=f"{species_names[i]} Rate")
+    print("plotting rate values")
+    for i in range(len(exp_y)):
+        if i < len(species_names):
+            plt.plot(exp_t, rate_values[i], label=f"{species_names[i]} Rate")
 
-    # # plt.plot(t, total, label="total")
+    # plt.plot(t, total, label="total")
+    plt.xlabel("Time (Myr)")
+    plt.ylabel("Rate")
+    plt.legend()
+    plt.savefig(f"outputs/{network_name}_rate_values.png")
+    plt.clf()
+
+    print("plotting energy and temperature")
+    plt.title("Energy and Temperature")
+    temperature = np.array([])
+    for i in range(len(exp_y[0])):
+        if i == 0:
+            T = calculate_temp_from_energy(*exp_y[:, i], rates)
+        else:
+            T = calculate_temp_from_energy(*exp_y[:, i], rates, temperature[-1])
+        temperature = np.append(temperature, T)
+    # plt.plot(exp_t, exp_y[6], label="Energy")
+    # plt.plot(exp_t, temperature, label="Temperature")
     # plt.xlabel("Time (Myr)")
-    # plt.ylabel("Rate")
-    # plt.legend()
-    # plt.savefig(f"outputs/{network_name}_rate_values.png")
-    # plt.clf()
+    # plt.ylabel("Energy")
+
+    fig, ax1 = plt.subplots()
+
+    color = "tab:blue"
+    ax1.set_xlabel("Time (Myr)")
+    ax1.set_ylabel("Energy", color=color)
+    ax1.plot(exp_t, exp_y[6] * rates.chemistry_data.energy_units, color=color)
+    ax1.tick_params(axis="y", labelcolor=color)
+
+    # Creating ax2, which shares the same x-axis with ax1
+    ax2 = ax1.twinx()
+    color = "tab:red"
+    ax2.set_ylabel("Temperature", color=color)
+    ax2.plot(exp_t, temperature, color=color)
+    ax2.tick_params(axis="y", labelcolor=color)
+
+    plt.title("Energy and Temperature")
+    fig.tight_layout()
+
+    plt.savefig(f"outputs/{network_name}_energy.png")
+    plt.clf()
+
+    print("plotting mu")
+    mus = np.array([])
+    for i in range(len(exp_y[0])):
+        mu = calculate_mu(rates, *exp_y[:, i])
+        mus = np.append(mus, mu)
+
+    plt.plot(exp_t, mus, label="Mu")
+    plt.title("Mu")
+    plt.xlabel("Time (Myr)")
+    plt.ylabel("Mu")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"outputs/{network_name}_mu.png")
+    plt.clf()
 
 
 if __name__ == "__main__":
     rates = get_rates()
-    T = 6.0e4
+    T = 1e6
     density = 0.1  # g /cm^3
     error_threshold = 0.01
-    tiny_number = 1e-20
+    tiny = 1e-20
     initial_conditions = [
         0.76 * density,
-        tiny_number * density,
-        (1.0 - 0.76) * density,
-        tiny_number * density,
-        tiny_number * density,
-        tiny_number * density,
+        tiny * density,
+        0.24 * density,
+        tiny * density,
+        tiny * density,
+        tiny * density,
+        None,  # energy
     ]
+
+    # initial_conditions = [
+    #     tiny * density,
+    #     0.76 * density,
+    #     tiny * density,
+    #     0.02 * density,
+    #     0.22 * density,
+    #     0.87998 * density,
+    #     None,  # energy
+    # ]
+
+    initial_conditions[-1] = (
+        calculate_energy_from_temp(*initial_conditions, rates, T)
+        / rates.chemistry_data.energy_units
+    )
+
     solve_network(
         rates,
         initial_conditions,
-        (0, 0.06),
+        (0, 0.1),
         T,
         error_threshold,
         check_error=False,
-        network_name="pe",
+        network_name="asymptotic",
     )

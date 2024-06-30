@@ -1,5 +1,5 @@
 import numpy as np
-from .odes import HI, HII, HeI, HeII, HeIII, e
+from .odes import HI, HII, HeI, HeII, HeIII, e, Energy
 from .timesteppers import simple_timestepper, constant_timestepper
 
 
@@ -26,8 +26,8 @@ def prediction_2(F_p, k_n, dt, y_prev):
     return yn
 
 
-odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None)]
-species_names = ["HI", "HII", "HeI", "HeII", "HeIII"]
+odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy(None)]
+species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
 
 
 def calculate_trial_timestep(equation_rates, y_values, i, trial_timestep_tolerance):
@@ -53,21 +53,6 @@ def calculate_trial_timestep(equation_rates, y_values, i, trial_timestep_toleran
     return max(max_dts)
 
 
-def update(equation_rates, y_values, i, dt):
-    for j in range(len(equation_rates)):
-        er = equation_rates[j]
-
-        y_prev = y_values[j, i]
-        k_n = sum(er.destruction_rates) * er.destruction_sign
-        creation = sum(er.positive_fluxes)
-        destruction = k_n * y_values[j, i]
-
-        if i == 0 or abs(k_n * dt) >= 1:
-            y_values[j, i + 1] = y_values[j, i] + dt * (creation - destruction)
-        else:
-            y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
-
-
 def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
     for eq in equations:
         eq.rates = rates
@@ -89,42 +74,71 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
             sum(HI_rate.positive_fluxes)
             - sum(HI_rate.destruction_rates) * initial_conditions[0]
         )
-        * 0.00001
+        * 0.0001
     )
 
+    dt = (tf - t0) / 50000
+
+    rate_values = np.zeros((num_eqns, 1))
+
+    def update(equation_rates, y_values, i, dt):
+        nonlocal rate_values
+        rate_values = np.hstack((rate_values, np.zeros((num_eqns, 1))))
+
+        for j in range(len(equation_rates)):
+            er = equation_rates[j]
+
+            y_prev = y_values[j, i]
+            k_n = sum(er.destruction_rates) * er.destruction_sign
+            creation = sum(er.positive_fluxes)
+            if (
+                j == 6
+            ):  # todo this should just check if its an energy equation, new networks will break this
+                y_values[j, i + 1] = y_values[j, i] + dt * (creation - k_n) / 0.1
+                continue
+
+            destruction = k_n * y_values[j, i]
+
+            rate_values[j, i] = creation
+
+            if i == 0 or abs(k_n * dt) >= 1:
+                y_values[j, i + 1] = y_values[j, i] + dt * (creation - destruction)
+            else:
+                y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
+
     trial_timestep_tol = 0.1
-    conservation_tol = 0.001
+    conservation_tol = 0.005
     conservation_satisfied_tol = 0.001
     decrease_dt_factor = 0.1
     increase_dt_factor = 0.1
 
-    t, y_values = simple_timestepper(
-        y_values,
-        equations,
-        update,
-        dt,
-        t0,
-        tf,
-        trial_timestep_tol,
-        conservation_tol,
-        conservation_satisfied_tol,
-        decrease_dt_factor,
-        increase_dt_factor,
-        T,
-    )
-
-    # t, y_values = constant_timestepper(
+    # t, y_values = simple_timestepper(
     #     y_values,
     #     equations,
     #     update,
     #     dt,
     #     t0,
     #     tf,
+    #     trial_timestep_tol,
+    #     conservation_tol,
+    #     conservation_satisfied_tol,
+    #     decrease_dt_factor,
+    #     increase_dt_factor,
     #     T,
     # )
+
+    t, y_values = constant_timestepper(
+        y_values,
+        equations,
+        update,
+        dt,
+        t0,
+        tf,
+        T,
+    )
 
     # print(t.shape, y_values.shape)
 
     print(f"number of time steps: {len(t)}")
 
-    return t, y_values, None
+    return t, y_values, rate_values

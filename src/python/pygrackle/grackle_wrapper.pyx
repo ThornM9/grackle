@@ -1015,82 +1015,82 @@ def get_k58_rate(fc, T):
 
 def get_ceHI_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ceHI_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ceHI_rate)
     return rval
 
 def get_ceHeI_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ceHeI_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ceHeI_rate)
     return rval
 
 def get_ceHeII_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ceHeII_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ceHeII_rate)
     return rval
 
 def get_ciHI_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ciHI_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ciHI_rate)
     return rval
 
 def get_ciHeI_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ceHeI_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ceHeI_rate)
     return rval
 
 def get_ciHeIS_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ciHeIS_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ciHeIS_rate)
     return rval
 
 def get_ciHeII_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, ciHeII_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, ciHeII_rate)
     return rval
 
 def get_reHII_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, reHII_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, reHII_rate)
     return rval
 
 def get_reHeII1_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, reHeII1_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, reHeII1_rate)
     return rval
 
 def get_reHeII2_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, reHeII2_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, reHeII2_rate)
     return rval
 
 def get_reHeIII_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, reHeIII_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, reHeIII_rate)
     return rval
 
 def get_brem_rate(fc, T):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
-    cdef double rval = _calculate_rate_helper(fc, T, kunit, brem_rate)
+    cdef double cool_unit = chem_data.cooling_units
+    cdef double rval = _calculate_rate_helper(fc, T, cool_unit, brem_rate)
     return rval
 
 def get_comp_rate(fc):
     cdef chemistry_data chem_data = fc.chemistry_data
-    cdef double kunit = chem_data.k_units
+    cdef double cool_unit = chem_data.cooling_units
 
     cdef c_chemistry_data my_chemistry = chem_data.data.data
-    cdef double rval = comp_rate(kunit, &my_chemistry)
+    cdef double rval = comp_rate(cool_unit, &my_chemistry)
     return rval
 
 def get_grackle_version():
