@@ -19,7 +19,7 @@
 
 
 import numpy as np
-from .odes import HI, HII, HeI, HeII, HeIII, e, get_cloudy_rates
+from .odes import HI, HII, HeI, HeII, HeIII, e, Energy, get_cloudy_rates
 import math
 from collections import namedtuple
 from .timesteppers import constant_timestepper, simple_timestepper
@@ -119,6 +119,12 @@ def is_equilibrated(rg_num, abundances, rates, T):
     return False
 
 
+# equation 13 in the asymptotic paper
+def prediction_2(F_p, k_n, dt, y_prev):
+    yn = (1 / (1 + k_n * dt)) * (y_prev + (F_p * dt))
+    return yn
+
+
 # flux list is an array of calculated flux values (either creative or destructive)
 # reaction_groups is an array of values for the reaction group it is part of (-1 if not part of any RG)
 def filter_equilibrated_fluxes(flux_list, reaction_groups, abundances, rates, T):
@@ -134,7 +140,7 @@ def filter_equilibrated_fluxes(flux_list, reaction_groups, abundances, rates, T)
     return filtered_fluxes
 
 
-odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None)]
+odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy(None)]
 species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
 
 
@@ -149,7 +155,7 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
             sum(HI_rate.positive_fluxes)
             - sum(HI_rate.destruction_rates) * initial_conditions[0]
         )
-        * 0.001
+        * 0.1
     )
 
     print(f"timestep: {dt *  3.1536e13}s")
@@ -157,13 +163,14 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
     n = int((tf - t0) / dt)
     # print(f"number of time steps: {n}")
     num_eqns = len(equations)
-    t = np.linspace(t0, tf, n + 1)
+    # t = np.linspace(t0, tf, n + 1)
     y_values = np.zeros((num_eqns, 1))
 
     for i, initial_value in enumerate(initial_conditions):
         y_values[i, 0] = initial_value
 
-    rate_values = np.zeros((num_eqns, n + 1))
+    # rate_values = np.zeros((num_eqns, n + 1))
+    rate_values = None
 
     def update(equation_rates, y_values, i, dt):
         start_population = sum(y_values[:5, i])
@@ -188,7 +195,13 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
 
             rate = F_p - F_m
 
-            y_values[j, i + 1] = y_values[j, i] + dt * rate
+            # y_values[j, i + 1] = y_values[j, i] + dt * rate
+            y_prev = y_values[j, i]
+
+            if i == 0 or abs(k0 * dt) < 1:
+                y_values[j, i + 1] = y_values[j, i] + dt * rate
+            else:
+                y_values[j, i + 1] = prediction_2(F_p, k0, dt, y_prev)
 
             # rate_values[j, i + 1] = rate
 
@@ -207,6 +220,8 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
                 restore_equilibrium_values[yc_idx].append(yc_eq)
 
         for j in range(len(restore_equilibrium_values)):
+            if j == 6:
+                continue
             if len(restore_equilibrium_values[j]) > 0:
                 y_values[j, i + 1] = sum(restore_equilibrium_values[j]) / len(
                     restore_equilibrium_values[j]
@@ -218,12 +233,12 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
         # print("ratio: ", start_population / end_population)
         # y_values[:5, i + 1] = y_values[:5, i + 1] * start_population / end_population
 
-    trial_timestep_tol = 0.005
-    conservation_tol = 0.005
-    conservation_satisfied_tol = 0.001
-    decrease_dt_factor = 0.1
-    increase_dt_factor = 0.1
-    t, y_values = simple_timestepper(
+    trial_timestep_tol = 0.1
+    conservation_tol = 0.01
+    conservation_satisfied_tol = 0.01
+    decrease_dt_factor = 0.2
+    increase_dt_factor = 0.4
+    t, y_values, timestepper_data = simple_timestepper(
         y_values,
         equations,
         update,
@@ -237,13 +252,13 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
         increase_dt_factor,
         T,
     )
-    print(rg_cfg)
-    print(get_kf(0, rates, T), get_kr(0))
-    print(get_kf(1, rates, T), get_kr(1))
-    print(get_kf(2, rates, T), get_kr(2))
-    print(calculate_equilibrium_values(0, y_values[:, 0], rates, T))
-    print(calculate_equilibrium_values(1, y_values[:, 0], rates, T))
-    print(calculate_equilibrium_values(2, y_values[:, 0], rates, T))
+    # print(rg_cfg)
+    # print(get_kf(0, rates, T), get_kr(0))
+    # print(get_kf(1, rates, T), get_kr(1))
+    # print(get_kf(2, rates, T), get_kr(2))
+    # print(calculate_equilibrium_values(0, y_values[:, 0], rates, T))
+    # print(calculate_equilibrium_values(1, y_values[:, 0], rates, T))
+    # print(calculate_equilibrium_values(2, y_values[:, 0], rates, T))
 
     # t, y_values = constant_timestepper(
     #     y_values,
@@ -257,4 +272,4 @@ def pe_solver(equations, initial_conditions, t_span, T, rates):
 
     print(f"number of time steps: {len(t)}")
 
-    return t, y_values, rate_values
+    return t, y_values, rate_values, timestepper_data

@@ -22,6 +22,7 @@ ReactionGroups = namedtuple("ReactionGroups", ["positive", "destruction"])
 class HI:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups([0], [-1, -1, -1])
@@ -42,6 +43,7 @@ class HI:
 class HII:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups([-1, -1, -1], [0])
@@ -62,6 +64,7 @@ class HII:
 class e:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
@@ -95,6 +98,7 @@ class e:
 class HeI:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
@@ -113,6 +117,7 @@ class HeI:
 class HeII:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
@@ -140,6 +145,7 @@ class HeII:
 class HeIII:
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
@@ -157,8 +163,10 @@ class HeIII:
 
 
 class Energy:
+
     def __init__(self, rates):
         self.rates = rates
+        self.is_energy = True
 
     def get_reaction_groups(self):
         return ReactionGroups([], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
@@ -172,24 +180,24 @@ class Energy:
             # cloudy["piHI"] * HI * self.rates.chemistry_data.cooling_units,
         ]
         destruction_rates = [
-            # collisional excitations
-            self.rates.ceHI(T) * HI * e,
-            self.rates.ceHeI(T) * HeII * (e**2) / 4,
-            self.rates.ceHeII(T) * HeII * e / 4,
-            # collisional ionizations
-            self.rates.ciHI(T) * HI * e,
-            self.rates.ciHeI(T) * HeI * e / 4,
-            self.rates.ciHeII(T) * HeII * e / 4,
-            self.rates.ciHeIS(T) * HeII * (e**2) / 4,
-            # recombinations
-            self.rates.reHII(T) * HII * e,
-            self.rates.reHeII1(T) * HeII * e / 4,
-            self.rates.reHeII2(T) * HeII * e / 4,
-            self.rates.reHeIII(T) * HeIII * e / 4,
-            # brem
-            self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
-            # comp
-            self.rates.comp() * e,
+            # # collisional excitations
+            # self.rates.ceHI(T) * HI * e,
+            # self.rates.ceHeI(T) * HeII * (e**2) / 4,
+            # self.rates.ceHeII(T) * HeII * e / 4,
+            # # collisional ionizations
+            # self.rates.ciHI(T) * HI * e,
+            # self.rates.ciHeI(T) * HeI * e / 4,
+            # self.rates.ciHeII(T) * HeII * e / 4,
+            # self.rates.ciHeIS(T) * HeII * (e**2) / 4,
+            # # recombinations
+            # self.rates.reHII(T) * HII * e,
+            # self.rates.reHeII1(T) * HeII * e / 4,
+            # self.rates.reHeII2(T) * HeII * e / 4,
+            # self.rates.reHeIII(T) * HeIII * e / 4,
+            # # brem
+            # self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
+            # # comp
+            # self.rates.comp() * e,
         ]
 
         return Rates(positive_fluxes, destruction_rates)

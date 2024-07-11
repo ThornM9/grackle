@@ -42,6 +42,14 @@ from networks.six_species.odes import (
 import similaritymeasures
 from test import test_equilibrium
 from networks.six_species.odes import get_cloudy_rates
+from plotting import (
+    plot_solution,
+    plot_prediction,
+    plot_rate_values,
+    plot_mu,
+    plot_energy_and_temperature,
+    plot_timestepper_data,
+)
 
 # todo reduce number density for pe to test that partial equilibrium works
 
@@ -123,19 +131,25 @@ def solve_network(
 
     solver, odes, species_names = solver_configs[network_name]
 
-    # print("solution solver")
-    # solution = solve_ivp(
-    #     network,
-    #     t_span,
-    #     initial_conditions,
-    #     method="BDF",
-    #     args=(default_odes, T, rates),
-    # )
-    # pred_t = solution.t
-    # pred_y = solution.y
+    print("solution solver")
+    solution = solve_ivp(
+        network,
+        t_span,
+        initial_conditions[:-1],
+        method="BDF",
+        args=(default_odes, T, rates),
+    )
+    pred_t = solution.t
+    pred_y = solution.y
+    print(f"number of timesteps in solution: {len(pred_t)}")
 
     print("custom solver")
-    exp_t, exp_y, rate_values = solver(odes, initial_conditions, t_span, T, rates)
+    exp_t, exp_y, rate_values, timestepper_data = solver(
+        odes, initial_conditions, t_span, T, rates
+    )
+
+    print("final solution state: ", pred_y[:, -1])
+    print("final solver state: ", exp_y[:, -1])
 
     if check_error:
         # check the error of the two curves isn't too large
@@ -160,101 +174,11 @@ def solve_network(
     if not plot_results:
         return
 
-    # print("plotting solution")
-    # # total = np.zeros(values[0].shape)
-    # for i in range(len(pred_y)):
-    #     if i < len(species_names):
-    #         plt.plot(pred_t, pred_y[i], label=f"{species_names[i]} Solution")
-
-    # plt.plot(t, total, label="total")
-    plt.title("Solution")
-    plt.xlabel("Time (Myr)")
-    plt.ylabel("Density (g/cm^3)")
-    plt.legend()
-    plt.savefig(f"outputs/{network_name}_densities_solution.png")
-    plt.clf()
-
-    print("plotting prediction")
-    for i in range(len(exp_y)):
-        if i < len(species_names):
-            plt.plot(
-                exp_t,
-                exp_y[i],
-                label=f"{species_names[i]} Predicted",
-            )
-
-    # total = np.sum(exp_y, 0)
-    # total -= exp_y[5]  # don't include the electron density
-    # plt.plot(exp_t, total, label="total density")
-
-    plt.title(f"{network_name} Prediction")
-    plt.xlabel("Time (Myr)")
-    plt.ylabel("Density (g/cm^3)")
-    plt.legend()
-    plt.savefig(f"outputs/{network_name}_densities_prediction.png")
-    plt.clf()
-
-    print("plotting rate values")
-    for i in range(len(exp_y)):
-        if i < len(species_names):
-            plt.plot(exp_t, rate_values[i], label=f"{species_names[i]} Rate")
-
-    # plt.plot(t, total, label="total")
-    plt.xlabel("Time (Myr)")
-    plt.ylabel("Rate")
-    plt.legend()
-    plt.savefig(f"outputs/{network_name}_rate_values.png")
-    plt.clf()
-
-    print("plotting energy and temperature")
-    plt.title("Energy and Temperature")
-    temperature = np.array([])
-    for i in range(len(exp_y[0])):
-        if i == 0:
-            T = calculate_temp_from_energy(*exp_y[:, i], rates)
-        else:
-            T = calculate_temp_from_energy(*exp_y[:, i], rates, temperature[-1])
-        temperature = np.append(temperature, T)
-    # plt.plot(exp_t, exp_y[6], label="Energy")
-    # plt.plot(exp_t, temperature, label="Temperature")
-    # plt.xlabel("Time (Myr)")
-    # plt.ylabel("Energy")
-
-    fig, ax1 = plt.subplots()
-
-    color = "tab:blue"
-    ax1.set_xlabel("Time (Myr)")
-    ax1.set_ylabel("Energy", color=color)
-    ax1.plot(exp_t, exp_y[6] * rates.chemistry_data.energy_units, color=color)
-    ax1.tick_params(axis="y", labelcolor=color)
-
-    # Creating ax2, which shares the same x-axis with ax1
-    ax2 = ax1.twinx()
-    color = "tab:red"
-    ax2.set_ylabel("Temperature", color=color)
-    ax2.plot(exp_t, temperature, color=color)
-    ax2.tick_params(axis="y", labelcolor=color)
-
-    plt.title("Energy and Temperature")
-    fig.tight_layout()
-
-    plt.savefig(f"outputs/{network_name}_energy.png")
-    plt.clf()
-
-    print("plotting mu")
-    mus = np.array([])
-    for i in range(len(exp_y[0])):
-        mu = calculate_mu(rates, *exp_y[:, i])
-        mus = np.append(mus, mu)
-
-    plt.plot(exp_t, mus, label="Mu")
-    plt.title("Mu")
-    plt.xlabel("Time (Myr)")
-    plt.ylabel("Mu")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(f"outputs/{network_name}_mu.png")
-    plt.clf()
+    plot_solution(pred_t, pred_y, species_names, network_name)
+    plot_prediction(exp_t, exp_y, species_names, network_name)
+    plot_energy_and_temperature(exp_t, exp_y, rates, network_name)
+    plot_mu(exp_t, exp_y, rates, network_name)
+    plot_timestepper_data(exp_t, timestepper_data, network_name)
 
 
 if __name__ == "__main__":
@@ -291,9 +215,9 @@ if __name__ == "__main__":
     solve_network(
         rates,
         initial_conditions,
-        (0, 0.1),
+        (0, 100),
         T,
         error_threshold,
         check_error=False,
-        network_name="asymptotic",
+        network_name="pe",
     )

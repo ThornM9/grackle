@@ -30,29 +30,6 @@ odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy
 species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
 
 
-def calculate_trial_timestep(equation_rates, y_values, i, trial_timestep_tolerance):
-    max_dts = []
-    for j in range(len(equation_rates)):
-        er = equation_rates[j]
-        k_n = sum(er.destruction_rates) * er.destruction_sign
-        creation = sum(er.positive_fluxes)
-        destruction = k_n * y_values[j, i]
-        y = y_values[j, i]
-
-        if creation > destruction:
-            new_y = y + y * trial_timestep_tolerance
-        elif creation < destruction:
-            new_y = y - y * trial_timestep_tolerance
-        else:
-            continue
-        max_dt = (new_y - y) / (creation - destruction)
-        max_dts.append(max_dt)
-
-    if len(max_dts) == 0:
-        return float("inf")
-    return max(max_dts)
-
-
 def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
     for eq in equations:
         eq.rates = rates
@@ -65,8 +42,8 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
     # improve by pre allocating larger arrays as needed during runtime
     y_values = np.zeros((num_eqns, 1))
 
-    for i, initial_value in enumerate(initial_conditions):
-        y_values[i, 0] = initial_value
+    for i in range(num_eqns):
+        y_values[i, 0] = initial_conditions[i]
 
     dt = abs(
         initial_conditions[0]
@@ -74,10 +51,10 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
             sum(HI_rate.positive_fluxes)
             - sum(HI_rate.destruction_rates) * initial_conditions[0]
         )
-        * 0.0001
+        * 0.001
     )
 
-    dt = (tf - t0) / 50000
+    # dt = (tf - t0) / 50000
 
     rate_values = np.zeros((num_eqns, 1))
 
@@ -101,41 +78,41 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
 
             rate_values[j, i] = creation
 
-            if i == 0 or abs(k_n * dt) >= 1:
+            if i == 0 or abs(k_n * dt) < 1:
                 y_values[j, i + 1] = y_values[j, i] + dt * (creation - destruction)
             else:
                 y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
 
     trial_timestep_tol = 0.1
-    conservation_tol = 0.005
-    conservation_satisfied_tol = 0.001
-    decrease_dt_factor = 0.1
-    increase_dt_factor = 0.1
+    conservation_tol = 0.1
+    conservation_satisfied_tol = 0.01
+    decrease_dt_factor = 0.2
+    increase_dt_factor = 0.2
 
-    # t, y_values = simple_timestepper(
-    #     y_values,
-    #     equations,
-    #     update,
-    #     dt,
-    #     t0,
-    #     tf,
-    #     trial_timestep_tol,
-    #     conservation_tol,
-    #     conservation_satisfied_tol,
-    #     decrease_dt_factor,
-    #     increase_dt_factor,
-    #     T,
-    # )
-
-    t, y_values = constant_timestepper(
+    t, y_values = simple_timestepper(
         y_values,
         equations,
         update,
         dt,
         t0,
         tf,
+        trial_timestep_tol,
+        conservation_tol,
+        conservation_satisfied_tol,
+        decrease_dt_factor,
+        increase_dt_factor,
         T,
     )
+
+    # t, y_values = constant_timestepper(
+    #     y_values,
+    #     equations,
+    #     update,
+    #     dt,
+    #     t0,
+    #     tf,
+    #     T,
+    # )
 
     # print(t.shape, y_values.shape)
 
