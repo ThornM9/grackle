@@ -1,3 +1,34 @@
+from solvers.networks.six_species_odes import (
+    odes as six_species_odes,
+    species_names as six_species_names,
+    indexes as six_species_indexes,
+    calculate_gamma as six_calculate_gamma,
+    calculate_temp_from_energy as six_calculate_temp,
+    calculate_energy_from_temp as six_calculate_energy,
+    calculate_mu as six_calculate_mu,
+    reaction_group_config as six_rg_config,
+)
+from solvers.networks.nine_species_odes import (
+    odes as nine_species_odes,
+    species_names as nine_species_names,
+    indexes as nine_species_indexes,
+    calculate_gamma as nine_calculate_gamma,
+    calculate_temp_from_energy as nine_calculate_temp,
+    calculate_energy_from_temp as nine_calculate_energy,
+    calculate_mu as nine_calculate_mu,
+    reaction_group_config as nine_rg_config,
+)
+from solvers.networks.twelve_species_odes import (
+    odes as twelve_species_odes,
+    species_names as twelve_species_names,
+    indexes as twelve_species_indexes,
+    calculate_gamma as twelve_calculate_gamma,
+    calculate_temp_from_energy as twelve_calculate_temp,
+    calculate_energy_from_temp as twelve_calculate_energy,
+    calculate_mu as twelve_calculate_mu,
+    reaction_group_config as twelve_rg_config,
+)
+
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -9,39 +40,14 @@ from pygrackle.utilities.physical_constants import (
     cm_per_mpc,
 )
 from scipy.integrate import solve_ivp
-from networks.six_species.default import (
+from solvers.pe import pe_solver
+from solvers.default import (
     odes as default_odes,
     euler_method_system as default_euler,
     species_names as default_species_names,
 )
-from networks.six_species.flfd import (
-    odes as flfd_odes,
-    flux_limited_solver,
-    species_names as flfd_species_names,
-)
-from networks.six_species.asymptotic import (
-    odes as asymptotic_odes,
-    asymptotic_methods_solver,
-    species_names as asymptotic_species_names,
-)
-from networks.six_species.qss import (
-    odes as qss_odes,
-    qss_methods_solver,
-    species_names as qss_species_names,
-)
-from networks.six_species.pe import (
-    odes as pe_odes,
-    pe_solver,
-    species_names as pe_species_names,
-)
-from networks.six_species.odes import (
-    calculate_temp_from_energy,
-    calculate_energy_from_temp,
-    calculate_mu,
-)
 import similaritymeasures
 from test import test_equilibrium
-from networks.six_species.odes import get_cloudy_rates
 from plotting import (
     plot_solution,
     plot_prediction,
@@ -50,20 +56,60 @@ from plotting import (
     plot_energy_and_temperature,
     plot_timestepper_data,
 )
+from collections import namedtuple
 
 # todo reduce number density for pe to test that partial equilibrium works
 
-# TODO species names can just be the one variable
 # map a config name to the solver, list of odes and the species names
+NetworkConfig = namedtuple(
+    "NetworkConfig",
+    [
+        "odes",
+        "species_names",
+        "idxs",
+        "calculate_gamma",
+        "calculate_mu",
+        "calculate_energy_from_temp",
+        "calculate_temp_from_energy",
+        "reaction_group_config",
+    ],
+)
+
+network_configs = {
+    "six": NetworkConfig(
+        six_species_odes,
+        six_species_names,
+        six_species_indexes,
+        six_calculate_gamma,
+        six_calculate_mu,
+        six_calculate_energy,
+        six_calculate_temp,
+        six_rg_config,
+    ),
+    "nine": NetworkConfig(
+        nine_species_odes,
+        nine_species_names,
+        nine_species_indexes,
+        nine_calculate_gamma,
+        nine_calculate_mu,
+        nine_calculate_energy,
+        nine_calculate_temp,
+        nine_rg_config,
+    ),
+    "twelve": NetworkConfig(
+        twelve_species_odes,
+        twelve_species_names,
+        twelve_species_indexes,
+        twelve_calculate_gamma,
+        twelve_calculate_mu,
+        twelve_calculate_energy,
+        twelve_calculate_temp,
+        twelve_rg_config,
+    ),
+}
 solver_configs = {
     "default": (default_euler, default_odes, default_species_names),
-    "asymptotic": (
-        asymptotic_methods_solver,
-        asymptotic_odes,
-        asymptotic_species_names,
-    ),
-    "qss": (qss_methods_solver, qss_odes, qss_species_names),
-    "pe": (pe_solver, pe_odes, pe_species_names),
+    "pe": pe_solver,
 }
 
 
@@ -100,10 +146,19 @@ def get_rates():
 
 
 # this function is just a wrapper to pass to scipy to solve for an example solution
-def network(t, y, odes, T, rates):
+def network(t, y, network_cfg, T):
+    odes = network_cfg.odes
+    gamma = network_cfg.calculate_gamma(y, odes[0].rates)
+    T = network_cfg.calculate_temp_from_energy(y, odes[0].rates, gamma)
+
     results = []
-    for ode in odes:
-        results.append(ode(rates, *y, T))
+    for i, ode in enumerate(odes):
+        er = ode.get_rates(y, T)
+        k_n = sum(er.destruction_rates) * er.destruction_sign
+        creation = sum(er.positive_fluxes)
+
+        destruction = k_n * y[i]
+        results.append(creation - destruction)
 
     return results
 
@@ -122,22 +177,28 @@ def solve_network(
     t_span,
     T,
     error_threshold,
+    solver_name="pe",
     network_name="default",
     plot_results=True,
     check_error=True,
 ):
-    if network_name not in solver_configs:
+    if solver_name not in solver_configs:
+        raise ValueError(f"Solver {solver_name} not found")
+    if network_name not in network_configs:
         raise ValueError(f"Network {network_name} not found")
 
-    solver, odes, species_names = solver_configs[network_name]
+    solver = solver_configs[solver_name]
+    network_config = network_configs[network_name]
 
+    for eq in network_config.odes:
+        eq.rates = rates
     print("solution solver")
     solution = solve_ivp(
         network,
         t_span,
-        initial_conditions[:-1],
+        initial_conditions,
         method="BDF",
-        args=(default_odes, T, rates),
+        args=(network_config, T),
     )
     pred_t = solution.t
     pred_y = solution.y
@@ -145,7 +206,7 @@ def solve_network(
 
     print("custom solver")
     exp_t, exp_y, rate_values, timestepper_data = solver(
-        odes, initial_conditions, t_span, T, rates
+        network_config, initial_conditions, t_span, T, rates
     )
 
     print("final solution state: ", pred_y[:, -1])
@@ -174,11 +235,25 @@ def solve_network(
     if not plot_results:
         return
 
-    plot_solution(pred_t, pred_y, species_names, network_name)
-    plot_prediction(exp_t, exp_y, species_names, network_name)
-    plot_energy_and_temperature(exp_t, exp_y, rates, network_name)
-    plot_mu(exp_t, exp_y, rates, network_name)
-    plot_timestepper_data(exp_t, timestepper_data, network_name)
+    plot_solution(
+        pred_t,
+        pred_y,
+        network_config.species_names,
+        network_name,
+        solver_name,
+    )
+    plot_prediction(
+        exp_t,
+        exp_y,
+        network_config.species_names,
+        network_name,
+        solver_name,
+    )
+    plot_energy_and_temperature(
+        network_config, exp_t, exp_y, rates, network_name, solver_name
+    )
+    plot_mu(network_config, exp_t, exp_y, rates, network_name, solver_name)
+    plot_timestepper_data(exp_t, timestepper_data, network_name, solver_name)
 
 
 if __name__ == "__main__":
@@ -187,11 +262,18 @@ if __name__ == "__main__":
     density = 0.1  # g /cm^3
     error_threshold = 0.01
     tiny = 1e-20
+
     initial_conditions = [
         0.76 * density,
         tiny * density,
         0.24 * density,
         tiny * density,
+        tiny * density,
+        tiny * density,
+        tiny * density,
+        tiny * density,
+        tiny * density,
+        2.0 * 3.4e-5 * density,
         tiny * density,
         tiny * density,
         None,  # energy
@@ -207,17 +289,23 @@ if __name__ == "__main__":
     #     None,  # energy
     # ]
 
+    network_name = "twelve"
+    solver_name = "pe"
+
     initial_conditions[-1] = (
-        calculate_energy_from_temp(*initial_conditions, rates, T)
+        network_configs[network_name].calculate_energy_from_temp(
+            initial_conditions, rates, T
+        )
         / rates.chemistry_data.energy_units
     )
 
     solve_network(
         rates,
         initial_conditions,
-        (0, 100),
+        (0, 20),
         T,
         error_threshold,
         check_error=False,
-        network_name="pe",
+        solver_name=solver_name,
+        network_name=network_name,
     )

@@ -1,13 +1,6 @@
 import numpy as np
 from collections import namedtuple
-import h5py
-import os
-from pygrackle.utilities.physical_constants import (
-    mass_hydrogen_cgs,
-    sec_per_Myr,
-    cm_per_mpc,
-)
-
+from ..utils import get_cloudy_rates
 
 Rates = namedtuple(
     "Rates", ["positive_fluxes", "destruction_rates", "destruction_sign"], defaults=[1]
@@ -19,15 +12,31 @@ ReactionGroups = namedtuple("ReactionGroups", ["positive", "destruction"])
 # to add a negative flux, multiply the rate by all inputs except itself
 
 
-class HI:
+### REACTION GROUPS
+# Reaction: (HII + e <--> HI + photon) (0)
+# Forward rate: k2
+# Reverse rate: piHI
+#
+# Reaction: (HeII + e <--> HeI + photon) (1)
+# Forward rate: k4
+# Reverse rate: piHeI
+#
+# Reaction: (HeIII + e <--> HeII + photon) (2)
+# Forward rate: k6
+# Reverse rate: piHeII
+
+
+class HI_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = False
 
     def get_reaction_groups(self):
-        return ReactionGroups([0], [-1, -1, -1])
+        return ReactionGroups([0], [-1, -1, -1, 0])
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
         cloudy = get_cloudy_rates()
         positive_fluxes = [self.rates.k2(T) * HII * e]
         destruction_rates = [
@@ -40,15 +49,17 @@ class HI:
         return Rates(positive_fluxes, destruction_rates)
 
 
-class HII:
+class HII_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = False
 
     def get_reaction_groups(self):
-        return ReactionGroups([-1, -1, -1], [0])
+        return ReactionGroups([-1, -1, -1, 0], [0])
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
         cloudy = get_cloudy_rates()
         positive_fluxes = [
             self.rates.k1(T) * HI * e,
@@ -61,18 +72,21 @@ class HII:
         return Rates(positive_fluxes, destruction_rates)
 
 
-class e:
+class e_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = True
 
     def get_reaction_groups(self):
         return ReactionGroups(
-            [-1, -1],
+            [-1, -1, 0, 1, 2],
             [-1, 0, -1, 1, -1, 2],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
+
         cloudy = get_cloudy_rates()
         positive_fluxes = [
             self.rates.k57(T) * HI * HI,
@@ -95,18 +109,21 @@ class e:
         return Rates(positive_fluxes, destruction_rates, destruction_sign)
 
 
-class HeI:
+class HeI_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
             [1],
-            [-1],
+            [-1, 1],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
+
         cloudy = get_cloudy_rates()
         positive_fluxes = [self.rates.k4(T) * HeII * e]
         destruction_rates = [self.rates.k3(T) * e, cloudy["piHeI"]]
@@ -114,18 +131,21 @@ class HeI:
         return Rates(positive_fluxes, destruction_rates)
 
 
-class HeII:
+class HeII_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
-            [-1, 2],
-            [1, -1],
+            [-1, 2, 1],
+            [1, -1, 2],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
+
         cloudy = get_cloudy_rates()
 
         positive_fluxes = [
@@ -142,18 +162,20 @@ class HeII:
         return Rates(positive_fluxes, destruction_rates)
 
 
-class HeIII:
+class HeIII_ODE:
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = False
+        self.is_electron = False
 
     def get_reaction_groups(self):
         return ReactionGroups(
-            [-1],
+            [-1, 2],
             [2],
         )
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
         cloudy = get_cloudy_rates()
 
         positive_fluxes = [self.rates.k5(T) * HeII * e, cloudy["piHeII"] * HeII]
@@ -162,16 +184,17 @@ class HeIII:
         return Rates(positive_fluxes, destruction_rates)
 
 
-class Energy:
+class Energy_ODE:
 
     def __init__(self, rates):
         self.rates = rates
         self.is_energy = True
 
     def get_reaction_groups(self):
-        return ReactionGroups([], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        return ReactionGroups([], [])
 
-    def get_rates(self, HI, HII, HeI, HeII, HeIII, e, E, T):
+    def get_rates(self, abundances, T):
+        HI, HII, HeI, HeII, HeIII, e, E = abundances
         cloudy = get_cloudy_rates()
 
         #     edot(i) = edot(i) + real(ipiht, DKIND) * photogamma(i,j,k)
@@ -203,8 +226,14 @@ class Energy:
         return Rates(positive_fluxes, destruction_rates)
 
 
-def calculate_energy_from_temp(HI, HII, HeI, HeII, HeIII, e, E, rates, T):
-    mu = calculate_mu(rates, HI, HII, HeI, HeII, HeIII, e, E)
+def calculate_gamma(abundances, rates):
+    return 5 / 3
+
+
+def calculate_energy_from_temp(abundances, rates, T):
+    HI, HII, HeI, HeII, HeIII, e, E = abundances
+
+    mu = calculate_mu(rates, abundances)
 
     gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
     mh = 1.67262171e-24  # mass of hydrogen
@@ -215,22 +244,10 @@ def calculate_energy_from_temp(HI, HII, HeI, HeII, HeIII, e, E, rates, T):
     return E
 
 
-def get_cloudy_rates():
-    my_dir = os.path.dirname(os.path.abspath(__file__))
-    file_name = os.path.join(
-        my_dir, "..", "..", "..", "input", "CloudyData_UVB=HM2012.h5"
-    )
+def calculate_temp_from_energy(abundances, rates, gamma):
+    HI, HII, HeI, HeII, HeIII, e, E = abundances
 
-    with h5py.File(file_name, "r") as file:
-        return {
-            "piHI": file["UVBRates"]["Photoheating"]["piHI"][0],
-            "piHeI": file["UVBRates"]["Photoheating"]["piHeI"][0],
-            "piHeII": file["UVBRates"]["Photoheating"]["piHeII"][0],
-        }
-
-
-def calculate_temp_from_energy(HI, HII, HeI, HeII, HeIII, e, E, rates, prevT=None):
-    gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
+    # gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
     density = HI + HII + HeI + HeII + HeIII
     number_density = (
         (HI + HII) + (HeI + HeII + HeIII) / 4 + e
@@ -242,15 +259,80 @@ def calculate_temp_from_energy(HI, HII, HeI, HeII, HeIII, e, E, rates, prevT=Non
     return temperature
 
 
-def calculate_mu(rates, HI, HII, HeI, HeII, HeIII, e, E):
+def calculate_mu(rates, abundances):
+    HI, HII, HeI, HeII, HeIII, e, E = abundances
+
     if E is None:
         nden = HI + HII + e + (HeI + HeII + HeIII) / 4
         density = HI + HII + HeI + HeII + HeIII
         return density / nden
 
-    temperature = calculate_temp_from_energy(HI, HII, HeI, HeII, HeIII, e, E, rates)
     gamma = 5 / 3  # adiabatic index of ideal gas for 6 species network
+    temperature = calculate_temp_from_energy(abundances, rates, gamma)
 
     mu = temperature / (E * (gamma - 1) * rates.chemistry_data.temperature_units)
 
     return mu
+
+
+# data structure to store all config info about the reaction groups in this network
+
+
+def get_kf(rg_num, rates, T):
+    if rg_num == 0:
+        return rates.k2(T)
+    if rg_num == 1:
+        return rates.k4(T)
+    if rg_num == 2:
+        return rates.k6(T)
+    raise Exception("Invalid reaction group number")
+
+
+def get_kr(rg_num):
+    cloudy = get_cloudy_rates()
+    if rg_num == 0:
+        return cloudy["piHI"]
+    if rg_num == 1:
+        return cloudy["piHeI"]
+    if rg_num == 2:
+        return cloudy["piHeII"]
+    raise Exception("Invalid reaction group number")
+
+
+# maps a reaction group to a list of abundance indices for the species involved in the network
+reaction_group_config = {
+    0: [1, 5, 0],
+    1: [3, 5, 2],
+    2: [4, 5, 3],
+    "get_kf": get_kf,
+    "get_kr": get_kr,
+}
+
+odes = [
+    HI_ODE(None),
+    HII_ODE(None),
+    HeI_ODE(None),
+    HeII_ODE(None),
+    HeIII_ODE(None),
+    e_ODE(None),
+    Energy_ODE(None),
+]
+
+indexes = {
+    "HI": 0,
+    "HII": 1,
+    "HeI": 2,
+    "HeII": 3,
+    "HeIII": 4,
+    "Electron": 5,
+    "Energy": 6,
+}
+
+species_names = [
+    "HI",
+    "HII",
+    "HeI",
+    "HeII",
+    "HeIII",
+    "Electron",
+]

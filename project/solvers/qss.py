@@ -1,6 +1,6 @@
 import numpy as np
 from collections import namedtuple
-from .odes import HI, HII, HeI, HeII, HeIII, e
+from .networks.six_species_odes import HI, HII, HeI, HeII, HeIII, e
 from .timesteppers import simple_timestepper, constant_timestepper
 
 Rates = namedtuple(

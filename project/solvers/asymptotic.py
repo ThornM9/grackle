@@ -1,5 +1,5 @@
 import numpy as np
-from .odes import HI, HII, HeI, HeII, HeIII, e, Energy
+from .networks.six_species_odes import HI, HII, HeI, HeII, HeIII, e, Energy
 from .timesteppers import simple_timestepper, constant_timestepper
 
 

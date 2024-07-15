@@ -1,5 +1,5 @@
 import numpy as np
-from .odes import calculate_temp_from_energy
+from .utils import calculate_population
 
 ### HELPERS ###
 
@@ -7,7 +7,7 @@ from .odes import calculate_temp_from_energy
 def calculate_trial_timestep(
     equation_rates, y_values, i, trial_timestep_tol, curr_t, t0, tf, equations
 ):
-    # TODO this whole function will break for other networks
+    # TODO this whole function is very brittle and will probably break for other networks
     # max_dts = []
     # for j in range(len(equation_rates)):
     #     er = equation_rates[j]
@@ -109,7 +109,9 @@ def calculate_trial_timestep(
 ### TIMESTEPPERS ###
 
 
-def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T):
+def constant_timestepper(network_cfg, y_values, update_func, initial_dt, t0, tf, T):
+    equations = network_cfg.odes
+
     dt = initial_dt
     n = int((tf - t0) / dt)
     print(f"number of time steps: {n}")
@@ -119,13 +121,12 @@ def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T
     y_values = new_y_values
 
     dt = initial_dt
-    prev_T = T
     for i in range(n):
-        T = calculate_temp_from_energy(*y_values[:, i], equations[0].rates, prev_T)
+        T = network_cfg.calculate_temp_from_energy(y_values[:, i], equations[0].rates)
         # calculate rates and fluxes
         ers = []
         for j, eq in enumerate(equations):
-            er = eq.get_rates(*y_values[:, i], T)
+            er = eq.get_rates(y_values[:, i], T)
             ers.append(er)
             # if j == 6:
             #     print(sum(er.destruction_rates), dt)
@@ -138,24 +139,12 @@ def constant_timestepper(y_values, equations, update_func, initial_dt, t0, tf, T
             raise e
             return t, y_values
 
-        prev_T = T
-
     return t, y_values
 
 
-def calculate_population(y_values, i, equations):
-    pop = 0
-    for j, eq in enumerate(equations):
-        if eq.is_energy:
-            continue
-        # pops.append(sum(y_values[j, i]))
-        pop += y_values[j, i]
-    return pop
-
-
 def simple_timestepper(
+    network_cfg,
     y_values,
-    equations,
     update_func,
     initial_dt,
     t0,
@@ -167,6 +156,7 @@ def simple_timestepper(
     increase_dt_factor,
     T,
 ):
+    equations = network_cfg.odes
     timestepper_data = {
         "i": [],
         "dt": [],
@@ -193,19 +183,19 @@ def simple_timestepper(
         # add a row
         y_values = np.hstack((y_values, np.zeros((len(equations), 1))))
 
-        T = calculate_temp_from_energy(*y_values[:, i], equations[0].rates, prev_T)
+        gamma = network_cfg.calculate_gamma(y_values[:, i], equations[0].rates)
+        T = network_cfg.calculate_temp_from_energy(
+            y_values[:, i], equations[0].rates, gamma
+        )
 
         # print(prev_T)
         # calculate rates and fluxes
         ers = []
-        energy_idx = None
         for j, eq in enumerate(equations):
-            er = eq.get_rates(*y_values[:, i], prev_T)
+            er = eq.get_rates(y_values[:, i], prev_T)
             ers.append(er)
-            if eq.is_energy:
-                energy_idx = j
 
-        # prev_T = T
+        prev_T = T
         # calculate trial timestep
         trial_dt = calculate_trial_timestep(
             ers, y_values, i, trial_timestep_tol, curr_t, t0, tf, equations
