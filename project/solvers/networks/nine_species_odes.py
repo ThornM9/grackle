@@ -513,6 +513,7 @@ reaction_group_config = {
     4: [indexes["HI"], indexes["HII"], indexes["H2II"]],
     5: [indexes["H2II"], indexes["HI"], indexes["H2I"], indexes["HII"]],
     6: [indexes["H2I"], indexes["HI"], indexes["HI"], indexes["HI"], indexes["HI"]],
+    "rg_count": 7,
     "get_kf": get_kf,
     "get_kr": get_kr,
 }

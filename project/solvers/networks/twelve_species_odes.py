@@ -431,7 +431,9 @@ class Energy_ODE:
         self.is_energy = True
 
     def get_reaction_groups(self):
-        # return ReactionGroups([], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        return ReactionGroups(
+            [-1], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+        )
         return ReactionGroups([], [])
 
     def get_rates(self, abundances, T):
@@ -441,27 +443,27 @@ class Energy_ODE:
         #     edot(i) = edot(i) + real(ipiht, DKIND) * photogamma(i,j,k)
         #  &                          / coolunit * HI(i,j,k) / dom
         positive_fluxes = [
-            # cloudy["piHI"] * HI * self.rates.chemistry_data.cooling_units,
+            cloudy["piHI"] * HI * self.rates.chemistry_data.cooling_units,
         ]
         destruction_rates = [
-            # # collisional excitations
-            # self.rates.ceHI(T) * HI * e,
-            # self.rates.ceHeI(T) * HeII * (e**2) / 4,
-            # self.rates.ceHeII(T) * HeII * e / 4,
-            # # collisional ionizations
-            # self.rates.ciHI(T) * HI * e,
-            # self.rates.ciHeI(T) * HeI * e / 4,
-            # self.rates.ciHeII(T) * HeII * e / 4,
-            # self.rates.ciHeIS(T) * HeII * (e**2) / 4,
-            # # recombinations
-            # self.rates.reHII(T) * HII * e,
-            # self.rates.reHeII1(T) * HeII * e / 4,
-            # self.rates.reHeII2(T) * HeII * e / 4,
-            # self.rates.reHeIII(T) * HeIII * e / 4,
-            # # brem
-            # self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
-            # # comp
-            # self.rates.comp() * e,
+            # collisional excitations
+            self.rates.ceHI(T) * HI * e,
+            self.rates.ceHeI(T) * HeII * (e**2) / 4,
+            self.rates.ceHeII(T) * HeII * e / 4,
+            # collisional ionizations
+            self.rates.ciHI(T) * HI * e,
+            self.rates.ciHeI(T) * HeI * e / 4,
+            self.rates.ciHeII(T) * HeII * e / 4,
+            self.rates.ciHeIS(T) * HeII * (e**2) / 4,
+            # recombinations
+            self.rates.reHII(T) * HII * e,
+            self.rates.reHeII1(T) * HeII * e / 4,
+            self.rates.reHeII2(T) * HeII * e / 4,
+            self.rates.reHeIII(T) * HeIII * e / 4,
+            # brem
+            self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
+            # comp
+            self.rates.comp() * e,
         ]
 
         return Rates(positive_fluxes, destruction_rates)
@@ -582,9 +584,10 @@ species_names = [
     "Electron",
     "H2I",
     "HM",
-    "H2II" "DI",
+    "H2II",
+    "DI",
     "DII",
-    "HDII",
+    "HDI",
 ]
 
 
@@ -650,6 +653,7 @@ reaction_group_config = {
     7: [indexes["HII"], indexes["DI"], indexes["HI"], indexes["DII"]],
     8: [indexes["H2I"], indexes["DII"], indexes["HDI"], indexes["HII"]],
     9: [indexes["H2I"], indexes["DI"], indexes["HDI"], indexes["HI"]],
+    "rg_count": 10,
     "get_kf": get_kf,
     "get_kr": get_kr,
 }

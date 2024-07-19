@@ -41,6 +41,7 @@ from pygrackle.utilities.physical_constants import (
 )
 from scipy.integrate import solve_ivp
 from solvers.pe import pe_solver
+from solvers.asymptotic import asymptotic_methods_solver
 from solvers.default import (
     odes as default_odes,
     euler_method_system as default_euler,
@@ -55,8 +56,14 @@ from plotting import (
     plot_mu,
     plot_energy_and_temperature,
     plot_timestepper_data,
+    plot_partial_equilibriums,
 )
 from collections import namedtuple
+import itertools
+import time
+import copy
+from experiment import experiment
+from solvers.utils import network, get_initial_conditions
 
 # todo reduce number density for pe to test that partial equilibrium works
 
@@ -110,6 +117,7 @@ network_configs = {
 solver_configs = {
     "default": (default_euler, default_odes, default_species_names),
     "pe": pe_solver,
+    "asymptotic": asymptotic_methods_solver,
 }
 
 
@@ -145,24 +153,6 @@ def get_rates():
     return rates
 
 
-# this function is just a wrapper to pass to scipy to solve for an example solution
-def network(t, y, network_cfg, T):
-    odes = network_cfg.odes
-    gamma = network_cfg.calculate_gamma(y, odes[0].rates)
-    T = network_cfg.calculate_temp_from_energy(y, odes[0].rates, gamma)
-
-    results = []
-    for i, ode in enumerate(odes):
-        er = ode.get_rates(y, T)
-        k_n = sum(er.destruction_rates) * er.destruction_sign
-        creation = sum(er.positive_fluxes)
-
-        destruction = k_n * y[i]
-        results.append(creation - destruction)
-
-    return results
-
-
 def convert_to_ty(t, y):
     data = np.zeros((y.shape[0], 2))
     data[:, 0] = t
@@ -177,10 +167,12 @@ def solve_network(
     t_span,
     T,
     error_threshold,
+    timestepper_settings,
     solver_name="pe",
     network_name="default",
     plot_results=True,
     check_error=True,
+    max_iters=10000,
 ):
     if solver_name not in solver_configs:
         raise ValueError(f"Solver {solver_name} not found")
@@ -206,11 +198,21 @@ def solve_network(
 
     print("custom solver")
     exp_t, exp_y, rate_values, timestepper_data = solver(
-        network_config, initial_conditions, t_span, T, rates
+        network_config,
+        initial_conditions,
+        t_span,
+        T,
+        rates,
+        timestepper_settings,
+        max_iters=max_iters,
     )
 
     print("final solution state: ", pred_y[:, -1])
     print("final solver state: ", exp_y[:, -1])
+
+    err = abs(exp_y[:, -1] - pred_y[:, -1]) / pred_y[:, -1]
+    print("error state: ", err)
+    print(all(e < error_threshold for e in err))
 
     if check_error:
         # check the error of the two curves isn't too large
@@ -254,43 +256,67 @@ def solve_network(
     )
     plot_mu(network_config, exp_t, exp_y, rates, network_name, solver_name)
     plot_timestepper_data(exp_t, timestepper_data, network_name, solver_name)
+    plot_partial_equilibriums(network_config, exp_t, exp_y, network_name, solver_name)
+
+
+def get_timestepper_settings(preset):
+    if preset == "aggressive":
+        return {
+            "trial_timestep_tol": 0.15,
+            "conservation_tol": 0.005,
+            "conservation_satisfied_tol": 0.005,
+            "decrease_dt_factor": 0.4,
+            "increase_dt_factor": 1.2,
+        }
+    elif preset == "conservative":
+        return {
+            "trial_timestep_tol": 0.1,
+            "conservation_tol": 0.001,
+            "conservation_satisfied_tol": 0.001,
+            "decrease_dt_factor": 0.1,
+            "increase_dt_factor": 0.2,
+        }
+    else:
+        raise ValueError(f"Unknown preset {preset}")
 
 
 if __name__ == "__main__":
     rates = get_rates()
-    T = 1e6
-    density = 0.1  # g /cm^3
     error_threshold = 0.01
     tiny = 1e-20
 
-    initial_conditions = [
-        0.76 * density,
-        tiny * density,
-        0.24 * density,
-        tiny * density,
-        tiny * density,
-        tiny * density,
-        tiny * density,
-        tiny * density,
-        tiny * density,
-        2.0 * 3.4e-5 * density,
-        tiny * density,
-        tiny * density,
-        None,  # energy
-    ]
-
-    # initial_conditions = [
-    #     tiny * density,
-    #     0.76 * density,
-    #     tiny * density,
-    #     0.02 * density,
-    #     0.22 * density,
-    #     0.87998 * density,
-    #     None,  # energy
-    # ]
-
+    # parameters
+    T = 1e6
+    final_time = 100
+    density = 0.1  # g /cm^3
     network_name = "twelve"
     solver_name = "pe"
+    initial_gas_state = "neutral"
+    timestepper_preset = "conservative"
+    max_iters = 10000
+
+    initial_conditions = get_initial_conditions(
+        density, network_name, initial_gas_state
+    )
+    timestepper_settings = get_timestepper_settings(timestepper_preset)
+
+    # timestepper_settings = {
+    #     "trial_timestep_tol": 0.15,
+    #     "conservation_tol": 0.005,
+    #     "conservation_satisfied_tol": 0.005,
+    #     "decrease_dt_factor": 0.4,
+    #     "increase_dt_factor": 1.2,
+    # }
+
+    # timestepper_settings = (
+    #     {
+    #         "trial_timestep_tol": 0.1,
+    #         "conservation_tol": 0.001,
+    #         "conservation_satisfied_tol": 0.001,
+    #         "decrease_dt_factor": 0.2,
+    #         "increase_dt_factor": 0.4,
+    #     },
+    # )
 
     initial_conditions[-1] = (
         network_configs[network_name].calculate_energy_from_temp(
@@ -302,10 +328,26 @@ if __name__ == "__main__":
     solve_network(
         rates,
         initial_conditions,
-        (0, 20),
+        (0, final_time),
         T,
         error_threshold,
+        timestepper_settings,
         check_error=False,
         solver_name=solver_name,
         network_name=network_name,
+        max_iters=max_iters,
     )
+
+    # start_time = time.time()
+    # experiment(
+    #     network_configs[network_name],
+    #     solver_configs[solver_name],
+    #     get_rates,
+    #     density,
+    #     (0, final_time),
+    # )
+    # end_time = time.time()
+
+    # # Calculate elapsed time
+    # elapsed_time = end_time - start_time
+    # print(f"Elapsed time: {elapsed_time} seconds")

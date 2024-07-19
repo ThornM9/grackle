@@ -123,7 +123,7 @@ def test_equilibrium(solver_config, initial_conditions, rates, T, t_span):
 
 
 if __name__ == "__main__":
-    from densities import solver_configs, get_rates
+    from project.main import solver_configs, get_rates
 
     # test_equilibrium(1.0e6)
 

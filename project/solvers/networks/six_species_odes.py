@@ -191,7 +191,10 @@ class Energy_ODE:
         self.is_energy = True
 
     def get_reaction_groups(self):
-        return ReactionGroups([], [])
+        # return ReactionGroups([], [])
+        return ReactionGroups(
+            [-1], [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]
+        )
 
     def get_rates(self, abundances, T):
         HI, HII, HeI, HeII, HeIII, e, E = abundances
@@ -200,27 +203,27 @@ class Energy_ODE:
         #     edot(i) = edot(i) + real(ipiht, DKIND) * photogamma(i,j,k)
         #  &                          / coolunit * HI(i,j,k) / dom
         positive_fluxes = [
-            # cloudy["piHI"] * HI * self.rates.chemistry_data.cooling_units,
+            cloudy["piHI"] * HI * self.rates.chemistry_data.cooling_units,
         ]
         destruction_rates = [
-            # # collisional excitations
-            # self.rates.ceHI(T) * HI * e,
-            # self.rates.ceHeI(T) * HeII * (e**2) / 4,
-            # self.rates.ceHeII(T) * HeII * e / 4,
-            # # collisional ionizations
-            # self.rates.ciHI(T) * HI * e,
-            # self.rates.ciHeI(T) * HeI * e / 4,
-            # self.rates.ciHeII(T) * HeII * e / 4,
-            # self.rates.ciHeIS(T) * HeII * (e**2) / 4,
-            # # recombinations
-            # self.rates.reHII(T) * HII * e,
-            # self.rates.reHeII1(T) * HeII * e / 4,
-            # self.rates.reHeII2(T) * HeII * e / 4,
-            # self.rates.reHeIII(T) * HeIII * e / 4,
-            # # brem
-            # self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
-            # # comp
-            # self.rates.comp() * e,
+            # collisional excitations
+            self.rates.ceHI(T) * HI * e,
+            self.rates.ceHeI(T) * HeII * (e**2) / 4,
+            self.rates.ceHeII(T) * HeII * e / 4,
+            # collisional ionizations
+            self.rates.ciHI(T) * HI * e,
+            self.rates.ciHeI(T) * HeI * e / 4,
+            self.rates.ciHeII(T) * HeII * e / 4,
+            self.rates.ciHeIS(T) * HeII * (e**2) / 4,
+            # recombinations
+            self.rates.reHII(T) * HII * e,
+            self.rates.reHeII1(T) * HeII * e / 4,
+            self.rates.reHeII2(T) * HeII * e / 4,
+            self.rates.reHeIII(T) * HeIII * e / 4,
+            # brem
+            self.rates.brem(T) * (HII * HeII / 4 + HeIII) * e,
+            # comp
+            self.rates.comp() * e,
         ]
 
         return Rates(positive_fluxes, destruction_rates)
@@ -285,10 +288,10 @@ def get_kf(rg_num, rates, T):
         return rates.k4(T)
     if rg_num == 2:
         return rates.k6(T)
-    raise Exception("Invalid reaction group number")
+    raise Exception("Invalid reaction group number: ", rg_num)
 
 
-def get_kr(rg_num):
+def get_kr(rg_num, rates, T):
     cloudy = get_cloudy_rates()
     if rg_num == 0:
         return cloudy["piHI"]
@@ -296,7 +299,7 @@ def get_kr(rg_num):
         return cloudy["piHeI"]
     if rg_num == 2:
         return cloudy["piHeII"]
-    raise Exception("Invalid reaction group number")
+    raise Exception("Invalid reaction group number: ", rg_num)
 
 
 # maps a reaction group to a list of abundance indices for the species involved in the network
@@ -304,6 +307,7 @@ reaction_group_config = {
     0: [1, 5, 0],
     1: [3, 5, 2],
     2: [4, 5, 3],
+    "rg_count": 3,
     "get_kf": get_kf,
     "get_kr": get_kr,
 }

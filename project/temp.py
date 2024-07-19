@@ -1,3 +1,6 @@
+import itertools
+
+
 def sum_of_numbers(input_string):
     # Split the input string into lines
     lines = input_string.split("\n")
@@ -17,242 +20,23 @@ def sum_of_numbers(input_string):
         if len(numbers) > 1:
             raise Exception("Each line should contain exactly one number")
 
-        if numbers[0] == 2:
-            total_sum += 1
-            continue
-
         # Sum the numbers in this line and add to the total sum
-        total_sum += sum(numbers)
+        total_sum += sum(numbers) - 1
 
     return total_sum
 
 
 # Example input string
 input_string = """
-             594
-           4
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           2
-           
+                      412
+          23
+          26
+          25
 """
+
+with open("file.log", "r") as file:
+    # Read the content of the file
+    input_string = file.read()
 
 # Calculate the sum of numbers in the string
 result = sum_of_numbers(input_string)

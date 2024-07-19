@@ -122,7 +122,10 @@ def constant_timestepper(network_cfg, y_values, update_func, initial_dt, t0, tf,
 
     dt = initial_dt
     for i in range(n):
-        T = network_cfg.calculate_temp_from_energy(y_values[:, i], equations[0].rates)
+        gamma = network_cfg.calculate_gamma(y_values[:, i], equations[0].rates)
+        T = network_cfg.calculate_temp_from_energy(
+            y_values[:, i], equations[0].rates, gamma
+        )
         # calculate rates and fluxes
         ers = []
         for j, eq in enumerate(equations):

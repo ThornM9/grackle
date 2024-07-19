@@ -1,5 +1,4 @@
 import numpy as np
-from .networks.six_species_odes import HI, HII, HeI, HeII, HeIII, e, Energy
 from .timesteppers import simple_timestepper, constant_timestepper
 
 
@@ -26,11 +25,10 @@ def prediction_2(F_p, k_n, dt, y_prev):
     return yn
 
 
-odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy(None)]
-species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
-
-
-def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
+def asymptotic_methods_solver(
+    network_config, initial_conditions, t_span, T, rates, timestepper_settings
+):
+    equations = network_config.odes
     for eq in equations:
         eq.rates = rates
 
@@ -83,24 +81,24 @@ def asymptotic_methods_solver(equations, initial_conditions, t_span, T, rates):
             else:
                 y_values[j, i + 1] = prediction_2(creation, k_n, dt, y_prev)
 
-    trial_timestep_tol = 0.1
-    conservation_tol = 0.1
-    conservation_satisfied_tol = 0.01
-    decrease_dt_factor = 0.2
-    increase_dt_factor = 0.2
+    # trial_timestep_tol = 0.1
+    # conservation_tol = 0.1
+    # conservation_satisfied_tol = 0.01
+    # decrease_dt_factor = 0.2
+    # increase_dt_factor = 0.2
 
     t, y_values = simple_timestepper(
+        network_config,
         y_values,
-        equations,
         update,
         dt,
         t0,
         tf,
-        trial_timestep_tol,
-        conservation_tol,
-        conservation_satisfied_tol,
-        decrease_dt_factor,
-        increase_dt_factor,
+        timestepper_settings["trial_timestep_tol"],
+        timestepper_settings["conservation_tol"],
+        timestepper_settings["conservation_satisfied_tol"],
+        timestepper_settings["decrease_dt_factor"],
+        timestepper_settings["increase_dt_factor"],
         T,
     )
 

@@ -48,9 +48,7 @@ def calculate_equilibrium_values(rg_cfg, rg_num, abundances, rates, T):
         c2 = yb + yc
 
         a = -kf
-        b = -(
-            c1 * kf + kr
-        )  # NOTE the paper says kb instead of kr here, possibly a typo
+        b = -(c1 * kf + kr)
         c = kr * (c2 - c1)
 
         q = (4 * a * c) - (b**2)
@@ -122,7 +120,7 @@ def is_equilibrated(rg_cfg, rg_num, abundances, rates, T):
         return True
 
     eps = 0.01  # error tolerance to check equilibrium
-    near_zero_eps = 1e-15
+    near_zero_eps = 1e-25
 
     rg_abundances = get_rg_abundances(rg_cfg, rg_num, abundances)
     equilibrium_values = calculate_equilibrium_values(
@@ -137,12 +135,13 @@ def is_equilibrated(rg_cfg, rg_num, abundances, rates, T):
     for i in range(len(rg_abundances)):
         if (
             abs(rg_abundances[i] - equilibrium_values[i]) / rg_abundances[i] < eps
-            or abs(rg_abundances[i] - equilibrium_values[i]) < near_zero_eps
+            or abs(rg_abundances[i] - equilibrium_values[i]) <= near_zero_eps
         ):
             near_equil[i] = True
 
     near_equilibrium = all(near_equil)
     if near_equilibrium:
+        print("\n\n")
         print(f"reaction group {rg_num} is near equilibrium")
         print("equilibrium values: ", equilibrium_values)
         print("actual values: ", rg_abundances)
@@ -183,30 +182,33 @@ def filter_equilibrated_fluxes(
     return filtered_fluxes
 
 
-# odes = [HI(None), HII(None), HeI(None), HeII(None), HeIII(None), e(None), Energy(None)]
-# species_names = ["HI", "HII", "HeI", "HeII", "HeIII", "Electron"]
-
-
-def pe_solver(network_config, initial_conditions, t_span, T, rates):
+def pe_solver(
+    network_config,
+    initial_conditions,
+    t_span,
+    T,
+    rates,
+    timestepper_settings,
+    dt=None,
+    max_iters=10000,
+):
     equations = network_config.odes
     rg_cfg = network_config.reaction_group_config
 
-    for eq in equations:
-        eq.rates = rates
-
-    HI_rate = equations[0].get_rates(initial_conditions, T)
-    dt = abs(
-        initial_conditions[0]
-        / (
-            sum(HI_rate.positive_fluxes)
-            - sum(HI_rate.destruction_rates) * initial_conditions[0]
+    if dt is None:
+        HI_rate = network_config.odes[0].get_rates(initial_conditions, T)
+        dt = abs(
+            initial_conditions[0]
+            / (
+                sum(HI_rate.positive_fluxes)
+                - sum(HI_rate.destruction_rates) * initial_conditions[0]
+            )
+            * 0.0001
         )
-        * 0.0001
-    )
 
-    print(f"timestep: {dt *  3.1536e13}s")
+    # print(f"timestep: {dt *  3.1536e13}s")
     t0, tf = t_span
-    n = int((tf - t0) / dt)
+    # n = int((tf - t0) / dt)
     # print(f"number of time steps: {n}")
     num_eqns = len(equations)
     # t = np.linspace(t0, tf, n + 1)
@@ -219,6 +221,8 @@ def pe_solver(network_config, initial_conditions, t_span, T, rates):
     rate_values = None
 
     def update(equation_rates, y_values, i, dt):
+        if i > max_iters:
+            raise Exception(f"Max iterations reached: {i} > {max_iters}")
         start_population = calculate_population(y_values, i, equations, False)
         abundances = y_values[:, i]
         for j in range(len(equation_rates)):
@@ -255,21 +259,27 @@ def pe_solver(network_config, initial_conditions, t_span, T, rates):
             else:
                 y_values[j, i + 1] = prediction_2(F_p, k0, dt, y_prev)
 
+            # tiny = 1e-40
+            # y_values[j, i + 1] = max(y_values[j, i + 1], tiny)
+
         # adjust the equil rgs back to equil
         restore_equilibrium_values = [[] for _ in range(len(equations))]
-        for rg_num, rg_idxs in rg_cfg.items():
+        for rg_num in range(rg_cfg["rg_count"]):
             if rg_equilibrated[rg_num]:
                 equilibrium_values = calculate_equilibrium_values(
                     rg_cfg, rg_num, y_values[:, i], rates, T
                 )
-
+                rg_idxs = rg_cfg[rg_num]
                 for j, idx in enumerate(rg_idxs):
                     restore_equilibrium_values[idx].append(equilibrium_values[j])
 
+        # if i % 50 == 0:
+        #     print(restore_equilibrium_values)
         for j in range(len(restore_equilibrium_values)):
             if equations[j].is_energy:
                 continue
             if len(restore_equilibrium_values[j]) > 0:
+                # print(j, restore_equilibrium_values[j])
                 y_values[j, i + 1] = sum(restore_equilibrium_values[j]) / len(
                     restore_equilibrium_values[j]
                 )
@@ -282,11 +292,6 @@ def pe_solver(network_config, initial_conditions, t_span, T, rates):
         # TODO uncomment? (but fix for different networks)
         # y_values[:5, i + 1] = y_values[:5, i + 1] * start_population / end_population
 
-    trial_timestep_tol = 0.1
-    conservation_tol = 0.01
-    conservation_satisfied_tol = 0.01
-    decrease_dt_factor = 0.2
-    increase_dt_factor = 0.2
     t, y_values, timestepper_data = simple_timestepper(
         network_config,
         y_values,
@@ -294,11 +299,11 @@ def pe_solver(network_config, initial_conditions, t_span, T, rates):
         dt,
         t0,
         tf,
-        trial_timestep_tol,
-        conservation_tol,
-        conservation_satisfied_tol,
-        decrease_dt_factor,
-        increase_dt_factor,
+        timestepper_settings["trial_timestep_tol"],
+        timestepper_settings["conservation_tol"],
+        timestepper_settings["conservation_satisfied_tol"],
+        timestepper_settings["decrease_dt_factor"],
+        timestepper_settings["increase_dt_factor"],
         T,
     )
 
@@ -313,15 +318,17 @@ def pe_solver(network_config, initial_conditions, t_span, T, rates):
     # )
     # timestepper_data = None
 
-    equilibrated_checks = [rg_equilibrated[rg_num] for rg_num in range(12)]
+    equilibrated_checks = [
+        rg_equilibrated[rg_num] for rg_num in range(rg_cfg["rg_count"])
+    ]
     print(equilibrated_checks)
     # print(rg_cfg)
     # print(get_kf(0, rates, T), get_kr(0))
     # print(get_kf(1, rates, T), get_kr(1))
     # print(get_kf(2, rates, T), get_kr(2))
-    # print(calculate_equilibrium_values(0, y_values[:, 0], rates, T))
-    # print(calculate_equilibrium_values(1, y_values[:, 0], rates, T))
-    # print(calculate_equilibrium_values(2, y_values[:, 0], rates, T))
+    # print(calculate_equilibrium_values(rg_cfg, 0, y_values[:, 0], rates, T))
+    # print(calculate_equilibrium_values(rg_cfg, 1, y_values[:, 0], rates, T))
+    # print(calculate_equilibrium_values(rg_cfg, 2, y_values[:, 0], rates, T))
     # for i in range(len(rg_cfg.items()) - 2):
     #     if i == 4:
     #         continue
