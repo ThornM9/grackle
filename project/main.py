@@ -209,6 +209,8 @@ def solve_network(
 
     print("final solution state: ", pred_y[:, -1])
     print("final solver state: ", exp_y[:, -1])
+    print("final energy sol: ", pred_y[-1, -1] * rates.chemistry_data.energy_units)
+    print("final energy exp: ", exp_y[-1, -1] * rates.chemistry_data.energy_units)
 
     err = abs(exp_y[:, -1] - pred_y[:, -1]) / pred_y[:, -1]
     print("error state: ", err)
@@ -273,8 +275,8 @@ def get_timestepper_settings(preset):
             "trial_timestep_tol": 0.1,
             "conservation_tol": 0.001,
             "conservation_satisfied_tol": 0.001,
-            "decrease_dt_factor": 0.1,
-            "increase_dt_factor": 0.2,
+            "decrease_dt_factor": 0.05,
+            "increase_dt_factor": 0.05,
         }
     else:
         raise ValueError(f"Unknown preset {preset}")
@@ -287,13 +289,13 @@ if __name__ == "__main__":
 
     # parameters
     T = 1e6
-    final_time = 100
+    final_time = 1
     density = 0.1  # g /cm^3
     network_name = "twelve"
     solver_name = "pe"
     initial_gas_state = "neutral"
     timestepper_preset = "conservative"
-    max_iters = 10000
+    max_iters = 100000
 
     initial_conditions = get_initial_conditions(
         density, network_name, initial_gas_state

@@ -5,9 +5,16 @@ from .utils import calculate_population
 
 
 def calculate_trial_timestep(
-    equation_rates, y_values, i, trial_timestep_tol, curr_t, t0, tf, equations
+    network_cfg,
+    equation_rates,
+    y_values,
+    i,
+    trial_timestep_tol,
+    curr_t,
+    t0,
+    tf,
+    equations,
 ):
-    # TODO this whole function is very brittle and will probably break for other networks
     # max_dts = []
     # for j in range(len(equation_rates)):
     #     er = equation_rates[j]
@@ -34,8 +41,9 @@ def calculate_trial_timestep(
     #  &              dt-ttot(i), 0.5_DKIND*dt)
 
     tiny = 1e-20
-    HI_er = equation_rates[0]
-    HI = y_values[0, i]
+    HI_idx = network_cfg.idxs["HI"]
+    HI_er = equation_rates[HI_idx]
+    HI = y_values[HI_idx, i]
     HI_k_n = sum(HI_er.destruction_rates) * HI_er.destruction_sign
     HI_creation = sum(HI_er.positive_fluxes)
     HI_destruction = HI_k_n * HI
@@ -43,12 +51,20 @@ def calculate_trial_timestep(
     # if abs(HI_rate) < tiny:
     #     HI_rate = tiny
 
-    e_er = equation_rates[5]
-    e = y_values[5, i]
+    electron_idx = network_cfg.idxs["e"]
+    e_er = equation_rates[electron_idx]
+    e = y_values[electron_idx, i]
     e_k_n = sum(e_er.destruction_rates) * e_er.destruction_sign
     e_creation = sum(e_er.positive_fluxes)
     e_destruction = e_k_n * e
     e_rate = e_creation - e_destruction
+
+    energy_idx = network_cfg.idxs["Energy"]
+    energy_rate = equation_rates[energy_idx]
+    E = y_values[energy_idx, i]
+    E_k_n = sum(energy_rate.destruction_rates) * energy_rate.destruction_sign
+    E_creation = sum(energy_rate.positive_fluxes)
+    E_rate = E_creation - E_k_n
     # if abs(e_rate) < tiny:
     #     e_rate = tiny
 
@@ -60,6 +76,10 @@ def calculate_trial_timestep(
         e_dt = float("inf")
     else:
         e_dt = trial_timestep_tol * e / e_rate
+    if E_rate == 0:
+        E_dt = float("inf")
+    else:
+        E_dt = trial_timestep_tol * E / E_rate
 
     old_pop = calculate_population(y_values, i, equations)
     max_diff = old_pop * trial_timestep_tol
@@ -77,6 +97,7 @@ def calculate_trial_timestep(
     max_dt = min(
         abs(e_dt),
         abs(HI_dt),
+        abs(E_dt),
         (tf - t0) - curr_t,
         0.5 * (tf - t0),
     )
@@ -115,6 +136,7 @@ def constant_timestepper(network_cfg, y_values, update_func, initial_dt, t0, tf,
     dt = initial_dt
     n = int((tf - t0) / dt)
     print(f"number of time steps: {n}")
+    print(f"final time: {tf}, dt: {dt}")
     t = np.linspace(t0, tf, n + 1)
     new_y_values = np.zeros((len(equations), n + 1))
     new_y_values[:, 0] = y_values[:, 0]
@@ -201,7 +223,7 @@ def simple_timestepper(
         prev_T = T
         # calculate trial timestep
         trial_dt = calculate_trial_timestep(
-            ers, y_values, i, trial_timestep_tol, curr_t, t0, tf, equations
+            network_cfg, ers, y_values, i, trial_timestep_tol, curr_t, t0, tf, equations
         )
         if trial_dt < dt:
             trial_used += 1

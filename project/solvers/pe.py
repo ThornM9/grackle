@@ -34,11 +34,15 @@ def get_rg_abundances(rg_cfg, rg_num, abundances):
     return rg_abundances
 
 
-def calculate_equilibrium_values(rg_cfg, rg_num, abundances, rates, T):
+def calculate_equilibrium_values(rg_cfg, rg_num, initial_abundances, rates, T):
     # NOTE this function will need to be modified if you want to add support for class C reaction groups in a future network
+    # TODO check if kf and kr are ever negative.
     kf = rg_cfg["get_kf"](rg_num, rates, T)
     kr = rg_cfg["get_kr"](rg_num, rates, T)
-    rg_abundances = get_rg_abundances(rg_cfg, rg_num, abundances)
+
+    if np.sign(kf) == -1 or np.sign(kr) == -1:
+        print("signs: ", np.sign(kf), np.sign(kr))
+    rg_abundances = get_rg_abundances(rg_cfg, rg_num, initial_abundances)
 
     if len(rg_abundances) == 3:
         # class B reaction
@@ -111,7 +115,7 @@ def calculate_equilibrium_values(rg_cfg, rg_num, abundances, rates, T):
     raise Exception("Invalid number of abundances")
 
 
-def is_equilibrated(rg_cfg, rg_num, abundances, rates, T):
+def is_equilibrated(rg_cfg, rg_num, initial_abundances, abundances, rates, T):
     return False
     if rg_num == -1 or rg_num == 4:  # TODO blocking rg 4 is temporary
         return False
@@ -124,7 +128,7 @@ def is_equilibrated(rg_cfg, rg_num, abundances, rates, T):
 
     rg_abundances = get_rg_abundances(rg_cfg, rg_num, abundances)
     equilibrium_values = calculate_equilibrium_values(
-        rg_cfg, rg_num, abundances, rates, T
+        rg_cfg, rg_num, initial_abundances, rates, T
     )
     near_equilibrium = True
     if len(rg_abundances) != len(equilibrium_values):
@@ -166,7 +170,7 @@ def prediction_2(F_p, k_n, dt, y_prev):
 # flux list is an array of calculated flux values (either creative or destructive)
 # reaction_groups is an array of values for the reaction group it is part of (-1 if not part of any RG)
 def filter_equilibrated_fluxes(
-    rg_cfg, eq_idx, flux_list, reaction_groups, abundances, rates, T
+    rg_cfg, eq_idx, flux_list, reaction_groups, initial_abundances, abundances, rates, T
 ):
     if len(flux_list) != len(reaction_groups):
         raise Exception("Invalid ODE reaction group setup at ODE index: ", eq_idx)
@@ -174,7 +178,7 @@ def filter_equilibrated_fluxes(
     filtered_fluxes = []
     zipped = zip(flux_list, reaction_groups)
     for flux_val, rg_num in zipped:
-        if is_equilibrated(rg_cfg, rg_num, abundances, rates, T):
+        if is_equilibrated(rg_cfg, rg_num, initial_abundances, abundances, rates, T):
             continue
 
         filtered_fluxes.append(flux_val)
@@ -196,14 +200,15 @@ def pe_solver(
     rg_cfg = network_config.reaction_group_config
 
     if dt is None:
-        HI_rate = network_config.odes[0].get_rates(initial_conditions, T)
+        HI_idx = network_config.idxs["HI"]
+        HI_rate = network_config.odes[HI_idx].get_rates(initial_conditions, T)
         dt = abs(
             initial_conditions[0]
             / (
                 sum(HI_rate.positive_fluxes)
                 - sum(HI_rate.destruction_rates) * initial_conditions[0]
             )
-            * 0.0001
+            * 0.001
         )
 
     # print(f"timestep: {dt *  3.1536e13}s")
@@ -225,6 +230,7 @@ def pe_solver(
             raise Exception(f"Max iterations reached: {i} > {max_iters}")
         start_population = calculate_population(y_values, i, equations, False)
         abundances = y_values[:, i]
+        initial_abundances = y_values[:, 0]
         for j in range(len(equation_rates)):
             er = equation_rates[j]
             eq = equations[j]
@@ -238,11 +244,25 @@ def pe_solver(
             #     len(rgs.destruction),
             # )
             positive_fluxes = filter_equilibrated_fluxes(
-                rg_cfg, j, er.positive_fluxes, rgs.positive, abundances, rates, T
+                rg_cfg,
+                j,
+                er.positive_fluxes,
+                rgs.positive,
+                initial_abundances,
+                abundances,
+                rates,
+                T,
             )
             # can slightly improve speed by filtering before calculating the rate
             destruction_rates = filter_equilibrated_fluxes(
-                rg_cfg, j, er.destruction_rates, rgs.destruction, abundances, rates, T
+                rg_cfg,
+                j,
+                er.destruction_rates,
+                rgs.destruction,
+                initial_abundances,
+                abundances,
+                rates,
+                T,
             )
 
             y0 = y_values[j, i]
@@ -253,6 +273,10 @@ def pe_solver(
             rate = F_p - F_m
 
             y_prev = y_values[j, i]
+
+            if eq.is_energy:
+                y_values[j, i + 1] = y_values[j, i] + dt * (F_p - k0) / 0.1
+                continue
 
             if i == 0 or abs(k0 * dt) < 1:
                 y_values[j, i + 1] = y_values[j, i] + dt * rate
@@ -307,6 +331,40 @@ def pe_solver(
         T,
     )
 
+    # for rg_num in range(rg_cfg["rg_count"]):
+    #     if rg_num == 4:
+    #         continue
+
+    #     # gamma = network_config.calculate_gamma(y_values[:, -1], equations[0].rates)
+    #     # T = network_config.calculate_temp_from_energy(
+    #     #     y_values[:, -1], equations[0].rates, gamma
+    #     # )
+    #     equilibrium_values = calculate_equilibrium_values(
+    #         rg_cfg, rg_num, y_values[:, 0], rates, T
+    #     )
+    #     for i in range(len(equilibrium_values)):
+    #         equilibrium_values[i] = max(equilibrium_values[i], 1e-20)
+
+    #     if len(equilibrium_values) == 4:
+    #         print("rg_num: ", rg_num, "equilibrium values: ", equilibrium_values)
+    #         kf = rg_cfg["get_kf"](rg_num, rates, T)
+    #         kr = rg_cfg["get_kr"](rg_num, rates, T)
+    #         creation = kf * equilibrium_values[0] * equilibrium_values[1]
+    #         # print(kf, equilibrium_values[0], equilibrium_values[1])
+    #         destruction = (
+    #             kr
+    #             * equilibrium_values[2]
+    #             * equilibrium_values[3]
+    #             # * equilibrium_values[4]
+    #         )
+
+    #         print(f"Creation: {creation}, Destruction: {destruction}")
+
+    #     # print(
+    #     #     "kf: ", rg_cfg["get_kf"](i, rates, T), "kr: ", rg_cfg["get_kr"](i, rates, T)
+    #     # )
+    # exit(0)
+
     # t, y_values = constant_timestepper(
     #     network_config,
     #     y_values,
@@ -326,6 +384,7 @@ def pe_solver(
     # print(get_kf(0, rates, T), get_kr(0))
     # print(get_kf(1, rates, T), get_kr(1))
     # print(get_kf(2, rates, T), get_kr(2))
+
     # print(calculate_equilibrium_values(rg_cfg, 0, y_values[:, 0], rates, T))
     # print(calculate_equilibrium_values(rg_cfg, 1, y_values[:, 0], rates, T))
     # print(calculate_equilibrium_values(rg_cfg, 2, y_values[:, 0], rates, T))

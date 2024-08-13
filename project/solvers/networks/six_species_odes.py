@@ -328,7 +328,7 @@ indexes = {
     "HeI": 2,
     "HeII": 3,
     "HeIII": 4,
-    "Electron": 5,
+    "e": 5,
     "Energy": 6,
 }
 

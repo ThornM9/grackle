@@ -1,4 +1,16 @@
 import itertools
+import re
+
+
+def contains_text_characters(string):
+    # Define a regex pattern that matches any character that is not a whitespace or a digit
+    pattern = re.compile(r"[^\s\d]")
+
+    # Search for the pattern in the string
+    match = pattern.search(string)
+
+    # If a match is found, the string contains text characters
+    return match is not None
 
 
 def sum_of_numbers(input_string):
@@ -7,6 +19,7 @@ def sum_of_numbers(input_string):
 
     # Initialize the sum of numbers
     total_sum = 0
+    count = 0
 
     # Iterate through each line
     for line in lines:
@@ -20,8 +33,13 @@ def sum_of_numbers(input_string):
         if len(numbers) > 1:
             raise Exception("Each line should contain exactly one number")
 
+        if contains_text_characters(line):
+            continue
+        # if sum(numbers) == 2 or count > 3:
+        #     continue
         # Sum the numbers in this line and add to the total sum
         total_sum += sum(numbers) - 1
+        count += 1
 
     return total_sum
 

@@ -82,17 +82,18 @@ def plot_energy_and_temperature(
 
     fig, ax1 = plt.subplots()
 
+    energy = exp_y[-1] * rates.chemistry_data.energy_units
     color = "tab:blue"
     ax1.set_xlabel("Time (Myr)")
     ax1.set_ylabel("Energy", color=color)
-    ax1.plot(exp_t, exp_y[6] * rates.chemistry_data.energy_units, color=color)
+    ax1.loglog(exp_t, energy, color=color)
     ax1.tick_params(axis="y", labelcolor=color)
 
     # Creating ax2, which shares the same x-axis with ax1
     ax2 = ax1.twinx()
     color = "tab:red"
     ax2.set_ylabel("Temperature", color=color)
-    ax2.plot(exp_t, temperature, color=color)
+    ax2.loglog(exp_t, temperature, color=color)
     ax2.tick_params(axis="y", labelcolor=color)
 
     plt.title("Energy and Temperature")
@@ -111,7 +112,7 @@ def plot_mu(network_config, exp_t, exp_y, rates, network_name, solver_name):
         mu = network_config.calculate_mu(rates, exp_y[:, i])
         mus = np.append(mus, mu)
 
-    plt.plot(exp_t, mus, label="Mu")
+    plt.loglog(exp_t, mus, label="Mu")
     plt.title("Mu")
     plt.xlabel("Time (Myr)")
     plt.ylabel("Mu")
@@ -187,6 +188,8 @@ def plot_partial_equilibriums(network_cfg, exp_t, exp_y, network_name, solver_na
         os.makedirs(f"outputs/{network_name}/equilibrium_plots")
     rg_cfg = network_cfg.reaction_group_config
 
+    seen = {}
+
     for rg_num in range(rg_cfg["rg_count"]):
         if rg_num == 4:
             continue
@@ -206,23 +209,44 @@ def plot_partial_equilibriums(network_cfg, exp_t, exp_y, network_name, solver_na
             equilibrium_values = calculate_equilibrium_values(
                 rg_cfg,
                 rg_num,
-                exp_y[:, i],
+                exp_y[:, 0],
                 rates,
                 T,
             )
 
+            if rg_num not in seen:
+                seen[rg_num] = 1
+            else:
+                seen[rg_num] += 1
+
+            tiny = 1e-50
             # if num_items == 3:
             #     kf = rg_cfg["get_kf"](rg_num, rates, T)
             #     kr = rg_cfg["get_kr"](rg_num, rates, T)
-            #     creation = kf * equilibrium_values[0] * equilibrium_values[1]
-            #     destruction = kr
-            #     print(f"Creation: {creation}, Destruction: {destruction}")
-            # if num_items == 4:
-            #     kf = rg_cfg["get_kf"](rg_num, rates, 1000)
-            #     kr = rg_cfg["get_kr"](rg_num, rates, 1000)
-            #     creation = kf * equilibrium_values[0] * equilibrium_values[1]
-            #     destruction = kr * equilibrium_values[2]
-            #     print(f"Creation: {creation}, Destruction: {destruction}")
+            #     creation = (
+            #         kf
+            #         * max(equilibrium_values[0], tiny)
+            #         * max(equilibrium_values[1], tiny)
+            #     )
+            #     destruction = kr * max(equilibrium_values[2], tiny)
+
+            #     if seen[rg_num] % 100 == 0:
+            #         # print(f"Creation: {creation}, Destruction: {destruction}")
+            #         print(
+            #             f"Creation: {equilibrium_values[0] * equilibrium_values[1] / equilibrium_values[2]}, Destruction: {kr / kf}"
+            #         )
+            if num_items == 4:
+                kf = rg_cfg["get_kf"](rg_num, rates, T)
+                kr = rg_cfg["get_kr"](rg_num, rates, T)
+                creation = kf * equilibrium_values[0] * equilibrium_values[1]
+                destruction = (
+                    kr
+                    * equilibrium_values[2]
+                    # equilibrium_values[3]
+                )
+
+                if seen[rg_num] % 100 == 0:
+                    print(f"Creation: {creation}, Destruction: {destruction}")
 
             all_equilibrium_values[:, i] = equilibrium_values
 
@@ -230,6 +254,8 @@ def plot_partial_equilibriums(network_cfg, exp_t, exp_y, network_name, solver_na
 
         # Iterate through the array and plot each item
         for i in range(len(rg_cfg[rg_num])):
+            species_idx = rg_cfg[rg_num][i]
+
             row = i // 2
             col = i % 2
             if i < 4:
@@ -237,20 +263,16 @@ def plot_partial_equilibriums(network_cfg, exp_t, exp_y, network_name, solver_na
             else:
                 ax = fig.add_subplot(num_rows, 1, 3)
 
-            # reached_equilibrium = np.any(
-            #     np.abs(all_equilibrium_values[i] - exp_y[i]) / exp_y[i] > 0.01
-            # )
             nonzero = np.where(
                 all_equilibrium_values == 0, 1e-50, all_equilibrium_values
             )
-            ax.semilogx(exp_t, exp_y[i], label="Value")
-            ax.semilogx(
+            ax.loglog(exp_t, exp_y[species_idx], label="Value")
+            ax.loglog(
                 exp_t,
                 nonzero[i],
                 label="Equilibrium Value",
             )
-            idx = rg_cfg[rg_num][i]
-            ax.set_title(f"{network_cfg.species_names[idx]}")
+            ax.set_title(f"{network_cfg.species_names[species_idx]}")
             ax.legend()
             ax.set_xlabel("Time (Myr)")
             ax.set_ylabel("Density (g/cm^3)")

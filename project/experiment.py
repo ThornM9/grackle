@@ -133,17 +133,6 @@ def test_solver(
         pass
 
 
-import pickle
-
-
-def pickle_test(obj, name):
-    try:
-        pickle.dumps(obj)
-        logger.debug(f"Pickling {name} succeeded.")
-    except pickle.PicklingError as e:
-        logger.error(f"Pickling {name} failed: {e}")
-
-
 def experiment(
     network_config,
     solver,
